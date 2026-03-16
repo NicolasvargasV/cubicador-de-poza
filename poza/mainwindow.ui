@@ -1,0 +1,835 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>MainWindow</class>
+ <widget class="QMainWindow" name="MainWindow">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>1200</width>
+    <height>720</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Cubicador de Pozas</string>
+  </property>
+  <property name="styleSheet">
+   <string notr="true">
+QMainWindow { background-color: #EAECF4; }
+   </string>
+  </property>
+  <widget class="QWidget" name="centralwidget">
+   <property name="styleSheet">
+    <string notr="true">background-color: #EAECF4;</string>
+   </property>
+   <layout class="QVBoxLayout" name="verticalLayout_root">
+    <property name="spacing">
+     <number>0</number>
+    </property>
+    <property name="leftMargin">
+     <number>0</number>
+    </property>
+    <property name="topMargin">
+     <number>0</number>
+    </property>
+    <property name="rightMargin">
+     <number>0</number>
+    </property>
+    <property name="bottomMargin">
+     <number>0</number>
+    </property>
+    <item>
+     <!-- HEADER con gradiente -->
+     <widget class="QWidget" name="header" native="true">
+      <property name="minimumSize">
+       <size>
+        <width>0</width>
+        <height>64</height>
+       </size>
+      </property>
+      <property name="maximumSize">
+       <size>
+        <width>16777215</width>
+        <height>64</height>
+       </size>
+      </property>
+      <property name="styleSheet">
+       <string notr="true">
+background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+    stop:0 #1A2052, stop:0.5 #29306A, stop:1 #3D4A9A);
+border-bottom: 2px solid #F75C03;
+       </string>
+      </property>
+      <layout class="QHBoxLayout" name="horizontalLayout_header">
+       <property name="leftMargin">
+        <number>18</number>
+       </property>
+       <property name="topMargin">
+        <number>10</number>
+       </property>
+       <property name="rightMargin">
+        <number>18</number>
+       </property>
+       <property name="bottomMargin">
+        <number>10</number>
+       </property>
+       <property name="spacing">
+        <number>14</number>
+       </property>
+       <item>
+        <!-- Ícono decorativo (barra naranja) -->
+        <widget class="QWidget" name="headerAccent" native="true">
+         <property name="minimumSize">
+          <size>
+           <width>4</width>
+           <height>36</height>
+          </size>
+         </property>
+         <property name="maximumSize">
+          <size>
+           <width>4</width>
+           <height>36</height>
+          </size>
+         </property>
+         <property name="styleSheet">
+          <string notr="true">background-color: #F75C03; border-radius: 2px;</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLabel" name="lblTitle">
+         <property name="text">
+          <string>Cubicador de Pozas</string>
+         </property>
+         <property name="styleSheet">
+          <string notr="true">
+color: #FFFFFF;
+font: bold 15pt "Segoe UI";
+background: transparent;
+letter-spacing: 1px;
+          </string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLabel" name="lblSubtitle">
+         <property name="text">
+          <string>— Cálculo de volúmenes</string>
+         </property>
+         <property name="styleSheet">
+          <string notr="true">
+color: rgba(255,255,255,0.55);
+font: 10pt "Segoe UI";
+background: transparent;
+          </string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <spacer name="headerSpacer">
+         <property name="orientation">
+          <enum>Qt::Horizontal</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>40</width>
+           <height>20</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+       <item>
+        <widget class="QLabel" name="lblReservLabel">
+         <property name="text">
+          <string>Reservorio:</string>
+         </property>
+         <property name="styleSheet">
+          <string notr="true">color: rgba(255,255,255,0.75); font: 9pt "Segoe UI"; background: transparent;</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QComboBox" name="cmbReservorio">
+         <property name="minimumSize">
+          <size>
+           <width>155</width>
+           <height>32</height>
+          </size>
+         </property>
+         <property name="styleSheet">
+          <string notr="true">
+QComboBox {
+    background: rgba(255,255,255,0.15);
+    color: #FFFFFF;
+    border: 1px solid rgba(255,255,255,0.35);
+    border-radius: 5px;
+    padding: 4px 10px;
+    font: 10pt "Segoe UI";
+}
+QComboBox:hover { background: rgba(255,255,255,0.25); }
+QComboBox::drop-down { border: none; }
+QComboBox QAbstractItemView {
+    background: #29306A; color: white;
+    selection-background-color: #F75C03;
+}
+          </string>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </item>
+    <item>
+     <!-- BODY -->
+     <widget class="QWidget" name="body" native="true">
+      <layout class="QHBoxLayout" name="horizontalLayout_body">
+       <property name="leftMargin">
+        <number>16</number>
+       </property>
+       <property name="topMargin">
+        <number>16</number>
+       </property>
+       <property name="rightMargin">
+        <number>16</number>
+       </property>
+       <property name="bottomMargin">
+        <number>16</number>
+       </property>
+       <property name="spacing">
+        <number>14</number>
+       </property>
+       <item>
+        <!-- Panel izquierdo: Vista DEM -->
+        <widget class="QGroupBox" name="groupDem">
+         <property name="title">
+          <string>  Vista DEM</string>
+         </property>
+         <property name="styleSheet">
+          <string notr="true">
+QGroupBox {
+    background: #FFFFFF;
+    border: 1px solid #D0D4E8;
+    border-top: 3px solid #29306A;
+    border-radius: 6px;
+    margin-top: 12px;
+    font: bold 11pt "Segoe UI";
+    color: #29306A;
+    padding-top: 6px;
+}
+QGroupBox::title {
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    left: 12px;
+    padding: 0 6px;
+    background: #FFFFFF;
+}
+          </string>
+         </property>
+         <layout class="QVBoxLayout" name="verticalLayout_dem">
+          <property name="spacing">
+           <number>10</number>
+          </property>
+          <item>
+           <widget class="QWidget" name="widgetDemActions" native="true">
+            <property name="styleSheet">
+             <string notr="true">background: transparent;</string>
+            </property>
+            <layout class="QGridLayout" name="gridLayout_demActions">
+             <property name="leftMargin">
+              <number>4</number>
+             </property>
+             <property name="topMargin">
+              <number>4</number>
+             </property>
+             <property name="rightMargin">
+              <number>4</number>
+             </property>
+             <property name="bottomMargin">
+              <number>4</number>
+             </property>
+             <property name="spacing">
+              <number>8</number>
+             </property>
+             <item row="0" column="0">
+              <widget class="QPushButton" name="btnPickDem">
+               <property name="text">
+                <string>📂  Elegir DEM…</string>
+               </property>
+               <property name="minimumSize">
+                <size>
+                 <width>0</width>
+                 <height>34</height>
+                </size>
+               </property>
+               <property name="styleSheet">
+                <string notr="true">
+QPushButton {
+    background: qlineargradient(x1:0,y1:0,x2:0,y2:1,
+        stop:0 #3D4A9A, stop:1 #29306A);
+    color: white;
+    font: bold 10pt "Segoe UI";
+    padding: 6px 16px;
+    border: none;
+    border-radius: 5px;
+}
+QPushButton:hover {
+    background: qlineargradient(x1:0,y1:0,x2:0,y2:1,
+        stop:0 #4A58B8, stop:1 #3D4A9A);
+}
+QPushButton:pressed { background: #1A2052; }
+                </string>
+               </property>
+              </widget>
+             </item>
+             <item row="0" column="1">
+              <widget class="QPushButton" name="btnPickMask">
+               <property name="text">
+                <string>🗺  Subir contorno…</string>
+               </property>
+               <property name="minimumSize">
+                <size>
+                 <width>0</width>
+                 <height>34</height>
+                </size>
+               </property>
+               <property name="styleSheet">
+                <string notr="true">
+QPushButton {
+    background: #F0F1F8;
+    color: #29306A;
+    font: 10pt "Segoe UI";
+    padding: 6px 16px;
+    border: 1px solid #C0C5E0;
+    border-radius: 5px;
+}
+QPushButton:hover { background: #E0E3F4; border-color: #29306A; }
+QPushButton:pressed { background: #D0D4E8; }
+                </string>
+               </property>
+              </widget>
+             </item>
+             <item row="0" column="2">
+              <widget class="QCheckBox" name="chkUseMask">
+               <property name="text">
+                <string>Usar contorno</string>
+               </property>
+               <property name="checked">
+                <bool>true</bool>
+               </property>
+               <property name="styleSheet">
+                <string notr="true">
+QCheckBox {
+    font: 10pt "Segoe UI";
+    color: #29306A;
+    spacing: 6px;
+}
+QCheckBox::indicator {
+    width: 16px; height: 16px;
+    border: 2px solid #29306A;
+    border-radius: 3px;
+    background: white;
+}
+QCheckBox::indicator:checked {
+    background: #29306A;
+    image: none;
+}
+                </string>
+               </property>
+              </widget>
+             </item>
+             <item row="0" column="3">
+              <spacer name="spacerDemActions">
+               <property name="orientation">
+                <enum>Qt::Horizontal</enum>
+               </property>
+               <property name="sizeHint" stdset="0">
+                <size>
+                 <width>40</width>
+                 <height>20</height>
+                </size>
+               </property>
+              </spacer>
+             </item>
+             <item row="1" column="0" colspan="4">
+              <widget class="QLabel" name="lblPaths">
+               <property name="text">
+                <string>Sin DEM cargado</string>
+               </property>
+               <property name="styleSheet">
+                <string notr="true">
+color: #808B96;
+font: italic 9pt "Segoe UI";
+background: #F7F8FC;
+border: 1px solid #E0E3F0;
+border-radius: 4px;
+padding: 3px 8px;
+                </string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </widget>
+          </item>
+          <item>
+           <widget class="QWidget" name="viewerContainer" native="true">
+            <property name="styleSheet">
+             <string notr="true">
+background: #1A1A2E;
+border: 1px solid #D0D4E8;
+border-radius: 4px;
+             </string>
+            </property>
+            <layout class="QVBoxLayout" name="verticalLayout_viewer">
+             <property name="leftMargin">
+              <number>0</number>
+             </property>
+             <property name="topMargin">
+              <number>0</number>
+             </property>
+             <property name="rightMargin">
+              <number>0</number>
+             </property>
+             <property name="bottomMargin">
+              <number>0</number>
+             </property>
+             <property name="spacing">
+              <number>0</number>
+             </property>
+            </layout>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <!-- Panel derecho -->
+        <widget class="QWidget" name="rightPanel" native="true">
+         <property name="styleSheet">
+          <string notr="true">background: transparent;</string>
+         </property>
+         <layout class="QVBoxLayout" name="verticalLayout_right">
+          <property name="leftMargin">
+           <number>0</number>
+          </property>
+          <property name="topMargin">
+           <number>0</number>
+          </property>
+          <property name="rightMargin">
+           <number>0</number>
+          </property>
+          <property name="bottomMargin">
+           <number>0</number>
+          </property>
+          <property name="spacing">
+           <number>14</number>
+          </property>
+          <item>
+           <!-- Parámetros -->
+           <widget class="QGroupBox" name="groupParams">
+            <property name="title">
+             <string>  Parámetros de cálculo</string>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">
+QGroupBox {
+    background: #FFFFFF;
+    border: 1px solid #D0D4E8;
+    border-top: 3px solid #F75C03;
+    border-radius: 6px;
+    margin-top: 12px;
+    font: bold 11pt "Segoe UI";
+    color: #F75C03;
+    padding-top: 6px;
+}
+QGroupBox::title {
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    left: 12px;
+    padding: 0 6px;
+    background: #FFFFFF;
+}
+             </string>
+            </property>
+            <layout class="QGridLayout" name="gridLayout_params">
+             <property name="leftMargin">
+              <number>12</number>
+             </property>
+             <property name="topMargin">
+              <number>10</number>
+             </property>
+             <property name="rightMargin">
+              <number>12</number>
+             </property>
+             <property name="bottomMargin">
+              <number>12</number>
+             </property>
+             <property name="spacing">
+              <number>10</number>
+             </property>
+             <item row="0" column="0">
+              <widget class="QLabel" name="lblSalt">
+               <property name="text">
+                <string>Cota de sal (m):</string>
+               </property>
+               <property name="styleSheet">
+                <string notr="true">font: 10pt "Segoe UI"; color: #333355;</string>
+               </property>
+              </widget>
+             </item>
+             <item row="0" column="1">
+              <widget class="QLineEdit" name="txtSalt">
+               <property name="styleSheet">
+                <string notr="true">
+QLineEdit {
+    font: 10pt "Segoe UI";
+    padding: 5px 8px;
+    border: 1px solid #C5CAE9;
+    border-radius: 4px;
+    background: #F7F8FC;
+    color: #1A2052;
+}
+QLineEdit:focus {
+    border: 2px solid #29306A;
+    background: #FFFFFF;
+}
+                </string>
+               </property>
+              </widget>
+             </item>
+             <item row="1" column="0">
+              <widget class="QLabel" name="lblWater">
+               <property name="text">
+                <string>Cota pelo de agua (m):</string>
+               </property>
+               <property name="styleSheet">
+                <string notr="true">font: 10pt "Segoe UI"; color: #333355;</string>
+               </property>
+              </widget>
+             </item>
+             <item row="1" column="1">
+              <widget class="QLineEdit" name="txtWater">
+               <property name="styleSheet">
+                <string notr="true">
+QLineEdit {
+    font: 10pt "Segoe UI";
+    padding: 5px 8px;
+    border: 1px solid #C5CAE9;
+    border-radius: 4px;
+    background: #F7F8FC;
+    color: #1A2052;
+}
+QLineEdit:focus {
+    border: 2px solid #29306A;
+    background: #FFFFFF;
+}
+                </string>
+               </property>
+              </widget>
+             </item>
+             <item row="2" column="0">
+              <widget class="QLabel" name="lblOcc">
+               <property name="text">
+                <string>Fracción ocluida (0–1):</string>
+               </property>
+               <property name="styleSheet">
+                <string notr="true">font: 10pt "Segoe UI"; color: #333355;</string>
+               </property>
+              </widget>
+             </item>
+             <item row="2" column="1">
+              <widget class="QLineEdit" name="txtOcc">
+               <property name="text">
+                <string>0.20</string>
+               </property>
+               <property name="styleSheet">
+                <string notr="true">
+QLineEdit {
+    font: 10pt "Segoe UI";
+    padding: 5px 8px;
+    border: 1px solid #C5CAE9;
+    border-radius: 4px;
+    background: #F7F8FC;
+    color: #1A2052;
+}
+QLineEdit:focus {
+    border: 2px solid #29306A;
+    background: #FFFFFF;
+}
+                </string>
+               </property>
+              </widget>
+             </item>
+             <item row="3" column="0" colspan="2">
+              <!-- Separador visual -->
+              <widget class="QFrame" name="separator">
+               <property name="frameShape">
+                <enum>QFrame::HLine</enum>
+               </property>
+               <property name="frameShadow">
+                <enum>QFrame::Sunken</enum>
+               </property>
+               <property name="styleSheet">
+                <string notr="true">color: #E0E3F0;</string>
+               </property>
+              </widget>
+             </item>
+             <item row="4" column="0" colspan="2">
+              <widget class="QWidget" name="widgetButtons" native="true">
+               <property name="styleSheet">
+                <string notr="true">background: transparent;</string>
+               </property>
+               <layout class="QHBoxLayout" name="horizontalLayout_buttons">
+                <property name="leftMargin">
+                 <number>0</number>
+                </property>
+                <property name="topMargin">
+                 <number>0</number>
+                </property>
+                <property name="rightMargin">
+                 <number>0</number>
+                </property>
+                <property name="bottomMargin">
+                 <number>0</number>
+                </property>
+                <property name="spacing">
+                 <number>8</number>
+                </property>
+                <item>
+                 <widget class="QPushButton" name="btnCalculate">
+                  <property name="text">
+                   <string>▶  Calcular</string>
+                  </property>
+                  <property name="minimumSize">
+                   <size>
+                    <width>0</width>
+                    <height>36</height>
+                   </size>
+                  </property>
+                  <property name="styleSheet">
+                   <string notr="true">
+QPushButton {
+    background: qlineargradient(x1:0,y1:0,x2:0,y2:1,
+        stop:0 #FF7A30, stop:1 #F75C03);
+    color: white;
+    font: bold 10pt "Segoe UI";
+    padding: 6px 18px;
+    border: none;
+    border-radius: 5px;
+}
+QPushButton:hover {
+    background: qlineargradient(x1:0,y1:0,x2:0,y2:1,
+        stop:0 #FF8C4A, stop:1 #FF6A1A);
+}
+QPushButton:pressed { background: #D44C00; }
+                   </string>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QPushButton" name="btnExportCsv">
+                  <property name="text">
+                   <string>↓  Exportar CSV</string>
+                  </property>
+                  <property name="minimumSize">
+                   <size>
+                    <width>0</width>
+                    <height>36</height>
+                   </size>
+                  </property>
+                  <property name="styleSheet">
+                   <string notr="true">
+QPushButton {
+    background: qlineargradient(x1:0,y1:0,x2:0,y2:1,
+        stop:0 #3D4A9A, stop:1 #29306A);
+    color: white;
+    font: bold 10pt "Segoe UI";
+    padding: 6px 14px;
+    border: none;
+    border-radius: 5px;
+}
+QPushButton:hover {
+    background: qlineargradient(x1:0,y1:0,x2:0,y2:1,
+        stop:0 #4A58B8, stop:1 #3D4A9A);
+}
+QPushButton:pressed { background: #1A2052; }
+                   </string>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QPushButton" name="btnClear">
+                  <property name="text">
+                   <string>✕  Limpiar</string>
+                  </property>
+                  <property name="minimumSize">
+                   <size>
+                    <width>0</width>
+                    <height>36</height>
+                   </size>
+                  </property>
+                  <property name="styleSheet">
+                   <string notr="true">
+QPushButton {
+    background: #EAECF4;
+    color: #555577;
+    font: 10pt "Segoe UI";
+    padding: 6px 14px;
+    border: 1px solid #C0C5E0;
+    border-radius: 5px;
+}
+QPushButton:hover { background: #D8DBF0; color: #29306A; }
+QPushButton:pressed { background: #C8CCE8; }
+                   </string>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <spacer name="spacerBtns">
+                  <property name="orientation">
+                   <enum>Qt::Horizontal</enum>
+                  </property>
+                  <property name="sizeHint" stdset="0">
+                   <size>
+                    <width>40</width>
+                    <height>20</height>
+                   </size>
+                  </property>
+                 </spacer>
+                </item>
+               </layout>
+              </widget>
+             </item>
+            </layout>
+           </widget>
+          </item>
+          <item>
+           <!-- Resultados -->
+           <widget class="QGroupBox" name="groupResults">
+            <property name="title">
+             <string>  Resultados</string>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">
+QGroupBox {
+    background: #FFFFFF;
+    border: 1px solid #D0D4E8;
+    border-top: 3px solid #29B6A8;
+    border-radius: 6px;
+    margin-top: 12px;
+    font: bold 11pt "Segoe UI";
+    color: #29B6A8;
+    padding-top: 6px;
+}
+QGroupBox::title {
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    left: 12px;
+    padding: 0 6px;
+    background: #FFFFFF;
+}
+             </string>
+            </property>
+            <layout class="QVBoxLayout" name="verticalLayout_results">
+             <property name="leftMargin">
+              <number>8</number>
+             </property>
+             <property name="topMargin">
+              <number>8</number>
+             </property>
+             <property name="rightMargin">
+              <number>8</number>
+             </property>
+             <property name="bottomMargin">
+              <number>8</number>
+             </property>
+             <item>
+              <widget class="QTreeWidget" name="treeResults">
+               <property name="styleSheet">
+                <string notr="true">
+QTreeWidget {
+    font: 10pt "Segoe UI";
+    border: 1px solid #D8DBF0;
+    border-radius: 4px;
+    background: #FAFBFF;
+    alternate-background-color: #F0F2FA;
+    color: #222244;
+    gridline-color: #E8EAF6;
+    outline: none;
+}
+QTreeWidget::item { padding: 4px 6px; }
+QTreeWidget::item:selected {
+    background: #29306A;
+    color: white;
+    border-radius: 3px;
+}
+QTreeWidget::item:hover:!selected { background: #E8EBF8; }
+QHeaderView::section {
+    background: qlineargradient(x1:0,y1:0,x2:0,y2:1,
+        stop:0 #3D4A9A, stop:1 #29306A);
+    color: white;
+    font: bold 10pt "Segoe UI";
+    padding: 6px 8px;
+    border: none;
+    border-right: 1px solid #4A58B8;
+}
+QScrollBar:vertical {
+    background: #F0F2FA;
+    width: 8px;
+    border-radius: 4px;
+}
+QScrollBar::handle:vertical {
+    background: #C0C5E0;
+    border-radius: 4px;
+    min-height: 30px;
+}
+QScrollBar::handle:vertical:hover { background: #29306A; }
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0px; }
+                </string>
+               </property>
+               <property name="alternatingRowColors">
+                <bool>true</bool>
+               </property>
+               <column>
+                <property name="text">
+                 <string>Item</string>
+                </property>
+               </column>
+               <column>
+                <property name="text">
+                 <string>Valor</string>
+                </property>
+               </column>
+               <column>
+                <property name="text">
+                 <string>Unidad</string>
+                </property>
+               </column>
+              </widget>
+             </item>
+            </layout>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </item>
+   </layout>
+  </widget>
+  <widget class="QStatusBar" name="statusbar">
+   <property name="styleSheet">
+    <string notr="true">
+QStatusBar {
+    background: #29306A;
+    color: rgba(255,255,255,0.7);
+    font: 9pt "Segoe UI";
+    border-top: 1px solid #1A2052;
+}
+    </string>
+   </property>
+  </widget>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
