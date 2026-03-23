@@ -1,0 +1,61 @@
+# ─── Python ───────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+.Python
+*.egg
+*.egg-info/
+dist-info/
+.eggs/
+pip-wheel-metadata/
+
+# Entornos virtuales
+.venv/
+venv/
+env/
+ENV/
+
+# ─── PyInstaller / Build ──────────────────────────────────
+build/
+dist/
+*.spec.bak
+
+# ─── Archivos comprimidos de distribución ────────────────
+*.zip
+*.tar.gz
+*.7z
+
+# ─── IDEs y editores ─────────────────────────────────────
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# ─── OS ───────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ─── Datos y configuración local ─────────────────────────
+# Base de datos local (generada en runtime)
+data/
+*.db
+*.sqlite
+*.sqlite3
+
+# Configuración de usuario (contiene rutas locales)
+config/user_prefs.json
+
+# Logs
+logs/
+*.log
+
+# ─── Archivos temporales ──────────────────────────────────
+*.tmp
+*.bak
+*.orig
