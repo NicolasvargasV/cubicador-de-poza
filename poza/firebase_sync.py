@@ -25,11 +25,12 @@ from __future__ import annotations
 
 import json
 import logging
-import os
+import shutil
 import threading
+import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -392,7 +393,168 @@ class FirebaseSync:
         t.start()
 
 
+    def download_dem_async(
+        self,
+        reservorio_codigo: str,
+        dest_dir: str | Path,
+        on_success: Optional[Callable[[str], None]] = None,
+        on_error: Optional[Callable[[Exception], None]] = None,
+        force: bool = False,
+    ) -> None:
+        """
+        Descarga el DEM más reciente de Firebase Storage al directorio local.
+
+        Si el archivo ya existe en caché y tiene menos de 7 días, lo reutiliza
+        salvo que se indique force=True.
+
+        Parámetros
+        ----------
+        reservorio_codigo : str
+        dest_dir : str | Path   Directorio donde guardar el archivo.
+        on_success : callable(local_path)
+        on_error : callable(exc)
+        force : bool            Si True, descarga aunque haya caché vigente.
+        """
+        if not self._ready:
+            logger.debug("Firebase no disponible, omitiendo download_dem.")
+            return
+
+        dest_dir = Path(dest_dir)
+
+        def _download() -> None:
+            try:
+                # Obtener metadatos del reservorio para saber el blob path
+                doc = self._db.collection("reservorios").document(reservorio_codigo).get()
+                if not doc.exists:
+                    raise FileNotFoundError(f"Reservorio '{reservorio_codigo}' no encontrado en Firestore.")
+                data = doc.to_dict()
+                blob_path = data.get("dem_blob_path")
+                dem_filename = data.get("dem_filename")
+                if not blob_path or not dem_filename:
+                    raise FileNotFoundError("No hay DEM registrado para este reservorio.")
+
+                dest_dir.mkdir(parents=True, exist_ok=True)
+                local_path = dest_dir / dem_filename
+
+                # Verificar caché vigente (< 7 días)
+                if not force and local_path.is_file():
+                    age_seconds = time.time() - local_path.stat().st_mtime
+                    if age_seconds < 7 * 24 * 3600:
+                        logger.info("DEM en caché vigente: %s (%.1f h)", local_path, age_seconds / 3600)
+                        if on_success:
+                            on_success(str(local_path))
+                        return
+
+                logger.info("Descargando DEM desde Storage: %s → %s", blob_path, local_path)
+                blob = self._bucket.blob(blob_path)
+                blob.download_to_filename(str(local_path))
+                logger.info("DEM descargado correctamente: %s", local_path)
+
+                if on_success:
+                    on_success(str(local_path))
+
+            except Exception as exc:
+                logger.error("Error al descargar DEM para '%s': %s", reservorio_codigo, exc)
+                if on_error:
+                    on_error(exc)
+
+        t = threading.Thread(target=_download, name=f"fb-dl-{reservorio_codigo}", daemon=True)
+        t.start()
+
+
 # ──────────────────────────────────────────────────────────────────────────────
-# Singleton global (importado directamente en gui_qt.py)
+# Gestor de caché local de DEMs (TTL = 7 días)
+# ──────────────────────────────────────────────────────────────────────────────
+
+class LocalDemCache:
+    """
+    Administra un directorio de caché de DEMs descargados desde Firebase.
+
+    Reglas:
+    - Cada archivo .tif cuyo mtime supere 7 días es eliminado automáticamente.
+    - La limpieza se ejecuta en segundo plano al inicializar y opcionalmente
+      cada vez que se solicita un DEM.
+
+    Uso:
+        cache = LocalDemCache()
+        path = cache.get(reservorio_codigo)      # None si no está en caché
+        cache.purge()                            # elimina archivos vencidos
+    """
+
+    TTL_SECONDS: int = 7 * 24 * 3600   # 7 días
+
+    def __init__(self, cache_dir: str | Path | None = None):
+        if cache_dir is None:
+            cache_dir = Path.home() / ".cache" / "cubicador" / "dems"
+        self._dir = Path(cache_dir)
+        self._dir.mkdir(parents=True, exist_ok=True)
+        # Limpiar en background al arrancar
+        threading.Thread(target=self.purge, name="dem-cache-purge", daemon=True).start()
+
+    @property
+    def cache_dir(self) -> Path:
+        return self._dir
+
+    def get(self, reservorio_codigo: str) -> Optional[str]:
+        """
+        Retorna la ruta local del DEM en caché si existe y no ha vencido.
+        Retorna None en cualquier otro caso.
+        """
+        pattern = f"*{reservorio_codigo}*.tif"
+        candidates = sorted(self._dir.glob(pattern), key=lambda p: p.stat().st_mtime, reverse=True)
+        now = time.time()
+        for p in candidates:
+            age = now - p.stat().st_mtime
+            if age < self.TTL_SECONDS:
+                logger.debug("Caché DEM vigente: %s (%.1f h)", p, age / 3600)
+                return str(p)
+        return None
+
+    def put(self, src_path: str | Path, reservorio_codigo: str | None = None) -> str:
+        """
+        Copia un archivo al caché y retorna la ruta de destino.
+        Actualiza el mtime al momento actual.
+        """
+        src = Path(src_path)
+        dest = self._dir / src.name
+        if dest.resolve() != src.resolve():
+            shutil.copy2(str(src), str(dest))
+        dest.touch()   # actualiza mtime
+        return str(dest)
+
+    def purge(self) -> List[str]:
+        """
+        Elimina archivos .tif del caché cuyo mtime supere el TTL.
+        Retorna lista de paths eliminados.
+        """
+        now = time.time(); removed = []
+        for p in self._dir.glob("*.tif"):
+            try:
+                age = now - p.stat().st_mtime
+                if age > self.TTL_SECONDS:
+                    p.unlink()
+                    removed.append(str(p))
+                    logger.info("Caché DEM vencido eliminado: %s (%.1f días)", p, age / 86400)
+            except Exception as exc:
+                logger.warning("No se pudo eliminar caché %s: %s", p, exc)
+        return removed
+
+    def list_cached(self) -> List[dict]:
+        """Retorna lista de {path, filename, age_hours, expired} para todos los .tif en caché."""
+        now = time.time(); result = []
+        for p in sorted(self._dir.glob("*.tif"), key=lambda x: x.stat().st_mtime, reverse=True):
+            age_s = now - p.stat().st_mtime
+            result.append({
+                "path": str(p),
+                "filename": p.name,
+                "age_hours": round(age_s / 3600, 1),
+                "expired": age_s > self.TTL_SECONDS,
+            })
+        return result
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Singletons globales
 # ──────────────────────────────────────────────────────────────────────────────
 firebase_sync = FirebaseSync()
+dem_cache     = LocalDemCache()
