@@ -55,6 +55,14 @@ config/user_prefs.json
 logs/
 *.log
 
+# ─── Credenciales Firebase / servicios en nube ───────────
+# NUNCA commitear claves privadas
+firebase-key.json
+*-firebase-adminsdk-*.json
+serviceAccountKey.json
+.env
+.env.*
+
 # ─── Archivos temporales ──────────────────────────────────
 *.tmp
 *.bak
