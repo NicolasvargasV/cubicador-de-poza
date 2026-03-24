@@ -23,7 +23,7 @@ from datetime import datetime
 from typing import Optional
 
 from sqlalchemy.orm import Session
-from sqlalchemy import select, desc, func
+from sqlalchemy import select, desc
 
 from .models import Usuario, Reservorio, Dem, Cubicacion, AuditLog
 from ..core import PondVolumes

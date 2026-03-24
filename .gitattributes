@@ -1,0 +1,22 @@
+# Normaliza line endings: LF en el repo, CRLF en checkout Windows
+* text=auto eol=lf
+
+# Archivos Python siempre LF
+*.py text eol=lf
+
+# Archivos de config
+*.spec  text eol=lf
+*.txt   text eol=lf
+*.md    text eol=lf
+*.json  text eol=lf
+*.html  text eol=lf
+*.ui    text eol=lf
+
+# Binarios: no tocar los line endings
+*.tif   binary
+*.tiff  binary
+*.png   binary
+*.ico   binary
+*.exe   binary
+*.zip   binary
+*.db    binary
