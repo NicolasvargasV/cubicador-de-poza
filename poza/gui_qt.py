@@ -41,108 +41,27 @@ except ImportError:
 _APP_NAME  = "V-Metric"
 _ICON_PATH = Path(__file__).parent.parent / "img" / "app.ico"
 
-# ── Dark Mode (Catppuccin Mocha) ──────────────────────────────────────────────
-DARK_QSS = """
-QMainWindow, QDialog, QWidget {
-    background-color: #1E1E2E; color: #CDD6F4;
-}
-QMainWindow { background-color: #181825; }
-QGroupBox {
-    background: #24243E; border: 1px solid #313244;
-    border-top: 3px solid #89B4FA;
-    border-radius: 6px; margin-top: 12px;
-    font: bold 10pt "Segoe UI"; color: #89B4FA; padding-top: 6px;
-}
-QGroupBox::title {
-    subcontrol-origin: margin; subcontrol-position: top left;
-    left: 12px; padding: 0 6px; background: #24243E;
-}
-QLineEdit {
-    background: #313244; color: #CDD6F4; border: 1px solid #45475A;
-    border-radius: 4px; padding: 5px 8px;
-}
-QLineEdit:focus { border: 2px solid #89B4FA; background: #1E1E2E; }
-QComboBox {
-    background: #313244; color: #CDD6F4; border: 1px solid #45475A;
-    border-radius: 4px; padding: 4px 8px;
-}
-QComboBox QAbstractItemView { background: #313244; color: #CDD6F4; selection-background-color: #89B4FA; }
-QPushButton {
-    background: #313244; color: #CDD6F4; border: 1px solid #45475A;
-    border-radius: 4px; padding: 5px 12px;
-}
-QPushButton:hover { background: #45475A; }
-QPushButton:checked { background: #89B4FA; color: #1E1E2E; border-color: #89B4FA; }
-QPushButton:pressed { background: #F38BA8; color: #1E1E2E; border-color: #F38BA8; }
-QPushButton:disabled { background: #24243E; color: #585B70; border-color: #313244; }
-QDockWidget {
-    font: bold 10pt "Segoe UI"; color: #CDD6F4;
-    border: 1px solid #313244;
-}
-QDockWidget::title {
-    background: qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 #11111B,stop:1 #24243E);
-    padding: 6px 12px; border-bottom: 2px solid #F38BA8; color: #CDD6F4;
-}
-QDockWidget::close-button, QDockWidget::float-button {
-    background: transparent; border: none; padding: 2px;
-}
-QDockWidget::close-button:hover, QDockWidget::float-button:hover {
-    background: rgba(205,214,244,0.15); border-radius: 3px;
-}
-QTableWidget, QTreeWidget {
-    background: #1E1E2E; alternate-background-color: #24243E;
-    gridline-color: #313244; color: #CDD6F4; border: none;
-}
-QHeaderView::section {
-    background: qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #313244,stop:1 #24243E);
-    color: #89B4FA; font: bold 9pt "Segoe UI"; padding: 5px 6px;
-    border: none; border-right: 1px solid #45475A;
-}
-QTableWidget::item:selected, QTreeWidget::item:selected {
-    background: #45475A; color: #CDD6F4;
-}
-QMenuBar {
-    background: #11111B; color: #CDD6F4;
-    font: 9pt "Segoe UI"; padding: 2px 0;
-}
-QMenuBar::item { padding: 4px 12px; border-radius: 3px; }
-QMenuBar::item:selected { background: rgba(205,214,244,0.15); }
-QMenu {
-    background: #181825; color: #CDD6F4;
-    border: 1px solid #313244; font: 9pt "Segoe UI";
-}
-QMenu::item { padding: 6px 20px 6px 10px; }
-QMenu::item:selected { background: #89B4FA; color: #1E1E2E; border-radius: 3px; }
-QMenu::separator { height: 1px; background: #313244; margin: 3px 8px; }
-QStatusBar { background: #11111B; color: #CDD6F4; border-top: 1px solid #313244; }
-QStatusBar::item { border: none; }
-QProgressBar { border: 1px solid #313244; border-radius: 4px; background: #24243E; }
-QProgressBar::chunk { background: qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 #89B4FA,stop:1 #F38BA8); border-radius: 3px; }
-QScrollBar:vertical { background: #1E1E2E; width: 7px; border-radius: 3px; }
-QScrollBar::handle:vertical { background: #45475A; border-radius: 3px; min-height: 24px; }
-QScrollBar::handle:vertical:hover { background: #89B4FA; }
-QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
-QCheckBox { color: #CDD6F4; spacing: 6px; }
-QCheckBox::indicator { width: 14px; height: 14px; border: 2px solid #89B4FA; border-radius: 3px; background: #313244; }
-QCheckBox::indicator:checked { background: #89B4FA; }
-QTextBrowser { background: #1E1E2E; color: #CDD6F4; border: none; }
-"""
+# ── Sistema de temas centralizado ─────────────────────────────────────────────
+from .themes import (
+    ThemeTokens, THEMES, THEME_CLARO,
+    build_qss, build_login_qss, get_theme_by_name,
+    contrast_ok, CUSTOM_FIELDS,
+)
+
+# Token del tema activo (global mutable — actualizado por _apply_theme)
+_ACTIVE_TOKENS: ThemeTokens = THEME_CLARO
 
 
-def _apply_theme(app: QApplication, theme: str) -> None:
-    """Aplica el tema globalmente a la aplicación Qt."""
-    if theme == "dark":
-        app.setStyleSheet(DARK_QSS)
-    else:
-        app.setStyleSheet("")  # light = sin hoja de estilo global
+def _apply_theme(app: QApplication, theme_name: str,
+                 custom_colors: dict | None = None) -> None:
+    """
+    Aplica el tema seleccionado a toda la aplicación Qt.
+    Centralizado — un único punto de verdad para el estilo global.
+    """
+    global _ACTIVE_TOKENS
+    _ACTIVE_TOKENS = get_theme_by_name(theme_name, custom_colors)
+    app.setStyleSheet(build_qss(_ACTIVE_TOKENS))
 
-
-# ── Colores ───────────────────────────────────────────────────────────────────
-COLOR_PRIMARY   = "#29306A"
-COLOR_ACCENT    = "#F75C03"
-COLOR_TEXT      = "#333333"
-COLOR_BG        = "#F6F6F6"
-COLOR_SECONDARY = "#808B96"
 
 _PREFS_PATH = Path.home() / ".config" / "cubicador" / "prefs.json"
 
@@ -152,7 +71,7 @@ def _load_prefs() -> dict:
             return json.loads(_PREFS_PATH.read_text("utf-8"))
     except Exception:
         pass
-    return {"theme": "light", "decimals": 3}
+    return {"theme": "claro", "decimals": 3, "custom_colors": {}}
 
 def _save_prefs(p: dict) -> None:
     try:
@@ -163,79 +82,6 @@ def _save_prefs(p: dict) -> None:
 
 def fmt(x: float, decimals: int = 3) -> str:
     return f"{x:,.{decimals}f}"
-
-# ── Estilos reutilizables ─────────────────────────────────────────────────────
-_BTN = """
-    QPushButton {
-        font: 9pt "Segoe UI"; padding: 4px 11px; min-height: 24px;
-        border: 1px solid #C8CBE0; border-radius: 4px;
-        background: #F0F2FA; color: #29306A;
-    }
-    QPushButton:hover    { background: #E0E4F0; }
-    QPushButton:checked  { background: #29306A; color: white; border-color: #29306A; }
-    QPushButton:pressed  { background: #F75C03; color: white; }
-    QPushButton:disabled { color: #AAAAAA; background: #F5F5F5; border-color: #E0E0E0; }
-"""
-_BTN_PRIMARY = """
-    QPushButton {
-        font: bold 10pt "Segoe UI"; color: white; border: none; border-radius: 5px;
-        padding: 8px 16px; min-height: 32px;
-        background: qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #3D4A9A,stop:1 #29306A);
-    }
-    QPushButton:hover   { background: qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #4A58B8,stop:1 #3D4A9A); }
-    QPushButton:pressed { background: #F75C03; }
-    QPushButton:disabled{ background: #AAAACC; color: #DDDDEE; }
-"""
-_BTN_SECONDARY = """
-    QPushButton {
-        font: 9pt "Segoe UI"; color: #29306A; border: 1px solid #C0C5E0;
-        border-radius: 5px; padding: 6px 14px; background: #F0F1F8;
-    }
-    QPushButton:hover { background: #E0E3F4; border-color: #29306A; }
-    QPushButton:pressed { background: #D0D4E8; }
-"""
-_LINEEDIT = """
-    QLineEdit {
-        font: 10pt "Segoe UI"; padding: 5px 8px;
-        border: 1px solid #C5CAE9; border-radius: 4px;
-        background: #F7F8FC; color: #1A2052;
-    }
-    QLineEdit:focus { border: 2px solid #29306A; background: #FFFFFF; }
-"""
-_SEP = "QFrame { color: #C8CBE0; margin: 3px 2px; }"
-_GROUPBOX = f"""
-    QGroupBox {{
-        background: #FFFFFF; border: 1px solid #D0D4E8;
-        border-top: 3px solid {COLOR_PRIMARY};
-        border-radius: 6px; margin-top: 12px;
-        font: bold 10pt "Segoe UI"; color: {COLOR_PRIMARY}; padding-top: 6px;
-    }}
-    QGroupBox::title {{
-        subcontrol-origin: margin; subcontrol-position: top left;
-        left: 12px; padding: 0 6px; background: #FFFFFF;
-    }}
-"""
-_GROUPBOX_ACCENT = _GROUPBOX.replace(
-    f"border-top: 3px solid {COLOR_PRIMARY}",
-    f"border-top: 3px solid {COLOR_ACCENT}"
-).replace(f"color: {COLOR_PRIMARY}", f"color: {COLOR_ACCENT}")
-
-_DOCK_STYLE = """
-    QDockWidget {
-        font: bold 10pt "Segoe UI"; color: white;
-        border: 1px solid #C8CBE0;
-    }
-    QDockWidget::title {
-        background: qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 #1A2052,stop:1 #29306A);
-        padding: 6px 12px; border-bottom: 2px solid #F75C03; color: white;
-    }
-    QDockWidget::close-button, QDockWidget::float-button {
-        background: transparent; border: none; padding: 2px;
-    }
-    QDockWidget::close-button:hover, QDockWidget::float-button:hover {
-        background: rgba(255,255,255,0.25); border-radius: 3px;
-    }
-"""
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -263,62 +109,67 @@ class SpinnerLabel(QLabel):
 # ─────────────────────────────────────────────────────────────────────────────
 
 class LoginDialog(QDialog):
-    _STYLE = f"""
-        QDialog    {{ background: {COLOR_BG}; }}
-        QLabel#title    {{ font: bold 16pt "Segoe UI"; color: {COLOR_PRIMARY}; }}
-        QLabel#subtitle {{ font: 9pt "Segoe UI"; color: {COLOR_SECONDARY}; }}
-        QLabel#error    {{ font: bold 9pt "Segoe UI"; color: #C0392B; }}
-        QLineEdit {{
-            font: 10pt "Segoe UI"; padding: 6px 8px;
-            border: 1px solid #C8CBE0; border-radius: 5px;
-            background: white; color: {COLOR_TEXT};
-        }}
-        QLineEdit:focus {{ border: 2px solid {COLOR_PRIMARY}; }}
-        QPushButton#btnLogin {{
-            font: bold 10pt "Segoe UI"; color: white;
-            background: {COLOR_PRIMARY}; border: none;
-            border-radius: 5px; padding: 8px 24px;
-        }}
-        QPushButton#btnLogin:hover   {{ background: #3D4A9A; }}
-        QPushButton#btnLogin:pressed {{ background: {COLOR_ACCENT}; }}
-        QLabel {{ font: 9pt "Segoe UI"; color: {COLOR_TEXT}; }}
+    """
+    Pantalla de inicio de sesión.
+    SIEMPRE usa el tema Claro corporativo (identidad de marca fija),
+    independientemente del tema configurado por el usuario.
     """
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Cubicador de Pozas — Inicio de sesión")
-        self.setFixedSize(400, 340)
+        self.setWindowTitle(f"{_APP_NAME} — Inicio de sesión")
+        self.setFixedSize(420, 360)
         self.setWindowFlag(Qt.WindowContextHelpButtonHint, False)
-        self.setStyleSheet(self._STYLE)
+        if _ICON_PATH.exists():
+            from PySide6.QtGui import QIcon
+            self.setWindowIcon(QIcon(str(_ICON_PATH)))
+        # Siempre tema Claro — no afectado por el tema global de la app
+        self.setStyleSheet(build_login_qss())
         self._user_id = None
         self._user_nombre = self._user_username = ""
         self._user_rol = "operador"
         self._build_ui()
 
     def _build_ui(self):
-        layout = QVBoxLayout(self); layout.setContentsMargins(32, 28, 32, 24); layout.setSpacing(10)
-        lbl = QLabel("Iniciar sesión"); lbl.setObjectName("title"); layout.addWidget(lbl)
-        sub = QLabel("Cubicador de Pozas · Operación Atacama"); sub.setObjectName("subtitle"); layout.addWidget(sub)
-        layout.addSpacing(12)
-        form = QFormLayout(); form.setSpacing(8); form.setLabelAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        self._txt_user = QLineEdit(); self._txt_user.setPlaceholderText("Usuario"); self._txt_user.setMaxLength(64)
+        layout = QVBoxLayout(self); layout.setContentsMargins(36, 30, 36, 26); layout.setSpacing(10)
+        # Header decorativo
+        hdr = QWidget(); hdr.setFixedHeight(6)
+        hdr.setStyleSheet(f"background: qlineargradient(x1:0,y1:0,x2:1,y2:0,"
+                          f"stop:0 {THEME_CLARO.primary},stop:1 {THEME_CLARO.accent_pos});")
+        layout.addWidget(hdr)
+        layout.addSpacing(4)
+        lbl = QLabel(f"  {_APP_NAME}")
+        lbl.setObjectName("loginTitle")
+        lbl.setStyleSheet(f"font: bold 20pt 'Segoe UI'; color: {THEME_CLARO.primary}; background: transparent;")
+        layout.addWidget(lbl)
+        sub = QLabel("  Operación Atacama — Iniciar sesión")
+        sub.setStyleSheet(f"font: 9pt 'Segoe UI'; color: {THEME_CLARO.secondary}; background: transparent;")
+        layout.addWidget(sub)
+        layout.addSpacing(14)
+        form = QFormLayout(); form.setSpacing(10); form.setLabelAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self._txt_user = QLineEdit(); self._txt_user.setPlaceholderText("Nombre de usuario"); self._txt_user.setMaxLength(64)
         self._txt_pass = QLineEdit(); self._txt_pass.setPlaceholderText("Contraseña")
         self._txt_pass.setEchoMode(QLineEdit.Password); self._txt_pass.setMaxLength(128)
         self._txt_pass.returnPressed.connect(self._try_login)
-        form.addRow("Usuario:", self._txt_user); form.addRow("Contraseña:", self._txt_pass)
+        form.addRow("Usuario:", self._txt_user)
+        form.addRow("Contraseña:", self._txt_pass)
         layout.addLayout(form)
-        self._lbl_error = QLabel(""); self._lbl_error.setObjectName("error")
-        self._lbl_error.setAlignment(Qt.AlignCenter); layout.addWidget(self._lbl_error)
-        # Throbber row
+        self._lbl_error = QLabel("")
+        self._lbl_error.setAlignment(Qt.AlignCenter)
+        self._lbl_error.setStyleSheet("color: #C0392B; font: bold 9pt 'Segoe UI'; background: transparent;")
+        layout.addWidget(self._lbl_error)
+        # Throbber
         thr = QHBoxLayout()
         self._spinner = SpinnerLabel()
-        self._spinner.setStyleSheet("font: bold 14pt 'Segoe UI'; color: #29306A;")
+        self._spinner.setStyleSheet(f"font: bold 14pt 'Segoe UI'; color: {THEME_CLARO.primary};")
         self._spinner_lbl = QLabel("")
-        self._spinner_lbl.setStyleSheet(f"color:{COLOR_SECONDARY}; font: italic 9pt 'Segoe UI';")
+        self._spinner_lbl.setStyleSheet(f"color:{THEME_CLARO.secondary}; font: italic 9pt 'Segoe UI'; background:transparent;")
         thr.addWidget(self._spinner); thr.addWidget(self._spinner_lbl); thr.addStretch()
         layout.addLayout(thr)
         layout.addStretch()
         row = QHBoxLayout()
-        btn = QPushButton("Acceder"); btn.setObjectName("btnLogin"); btn.setDefault(True)
+        btn = QPushButton("Acceder")
+        # objectName registrado en build_login_qss para estilos de login
+        btn.setObjectName("btnLoginAcceder"); btn.setDefault(True)
         btn.clicked.connect(self._try_login)
         row.addStretch(); row.addWidget(btn); layout.addLayout(row)
 
@@ -381,10 +232,10 @@ class AccountDialog(QDialog):
 
         # ── Tab bar ──
         tab_bar = QWidget()
-        tab_bar.setStyleSheet(f"background:{COLOR_PRIMARY};")
+        tab_bar.setObjectName("dialogHeader")
         tbl = QHBoxLayout(tab_bar); tbl.setContentsMargins(12, 8, 12, 0); tbl.setSpacing(4)
         lbl_title = QLabel(f"  {_APP_NAME}  ·  Cuenta")
-        lbl_title.setStyleSheet("color:white; font:bold 13pt 'Segoe UI'; background:transparent;")
+        lbl_title.setStyleSheet("font: bold 13pt 'Segoe UI';")
         tbl.addWidget(lbl_title); tbl.addStretch()
 
         self._tab_group = QButtonGroup(self); self._tab_group.setExclusive(True)
@@ -392,13 +243,7 @@ class AccountDialog(QDialog):
 
         def _add_tab(label: str, widget: QWidget, idx: int):
             btn = QPushButton(label); btn.setCheckable(True)
-            btn.setStyleSheet("""
-                QPushButton{font:9pt 'Segoe UI';color:rgba(255,255,255,0.7);
-                    background:transparent;border:none;padding:6px 14px;
-                    border-bottom:3px solid transparent;}
-                QPushButton:checked{color:white;border-bottom:3px solid #F75C03;}
-                QPushButton:hover{color:white;}
-            """)
+            btn.setObjectName("dialogTab")
             self._tab_group.addButton(btn, idx); tbl.addWidget(btn)
             self._tab_stack.addWidget(widget)
             return btn
@@ -414,17 +259,16 @@ class AccountDialog(QDialog):
         vl.addWidget(self._tab_stack, 1)
 
     def _build_my_account_tab(self) -> QWidget:
-        w = QWidget(); w.setStyleSheet(f"background:{COLOR_BG};")
+        w = QWidget()
         vl = QVBoxLayout(w); vl.setContentsMargins(28, 20, 28, 20); vl.setSpacing(10)
         lbl_user = QLabel(f"Usuario: <b>{self._user_username}</b>")
-        lbl_user.setStyleSheet(f"color:{COLOR_SECONDARY}; font:9pt 'Segoe UI';")
         vl.addWidget(lbl_user)
         form = QFormLayout(); form.setSpacing(8); form.setLabelAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        self.txt_nombre = QLineEdit(self._user_nombre); self.txt_nombre.setStyleSheet(_LINEEDIT)
+        self.txt_nombre = QLineEdit(self._user_nombre)
         self.txt_pass1  = QLineEdit(); self.txt_pass1.setPlaceholderText("Nueva contraseña (opcional)")
-        self.txt_pass1.setEchoMode(QLineEdit.Password); self.txt_pass1.setStyleSheet(_LINEEDIT)
+        self.txt_pass1.setEchoMode(QLineEdit.Password)
         self.txt_pass2  = QLineEdit(); self.txt_pass2.setPlaceholderText("Confirmar contraseña")
-        self.txt_pass2.setEchoMode(QLineEdit.Password); self.txt_pass2.setStyleSheet(_LINEEDIT)
+        self.txt_pass2.setEchoMode(QLineEdit.Password)
         form.addRow("Nombre completo:", self.txt_nombre)
         form.addRow("Nueva contraseña:", self.txt_pass1)
         form.addRow("Confirmar:", self.txt_pass2)
@@ -432,8 +276,8 @@ class AccountDialog(QDialog):
         self._lbl_msg = QLabel(""); self._lbl_msg.setAlignment(Qt.AlignCenter)
         vl.addWidget(self._lbl_msg); vl.addStretch()
         row = QHBoxLayout()
-        btn_cancel = QPushButton("Cancelar"); btn_cancel.setStyleSheet(_BTN_SECONDARY); btn_cancel.clicked.connect(self.reject)
-        btn_save   = QPushButton("Guardar cambios"); btn_save.setStyleSheet(_BTN_PRIMARY); btn_save.clicked.connect(self._save_account)
+        btn_cancel = QPushButton("Cancelar"); btn_cancel.setObjectName("btnSecondary"); btn_cancel.clicked.connect(self.reject)
+        btn_save   = QPushButton("Guardar cambios"); btn_save.setObjectName("btnPrimary"); btn_save.clicked.connect(self._save_account)
         row.addStretch(); row.addWidget(btn_cancel); row.addWidget(btn_save); vl.addLayout(row)
         return w
 
@@ -445,11 +289,11 @@ class AccountDialog(QDialog):
         self._lbl_msg.setText("Cambios guardados."); QTimer.singleShot(800, self.accept)
 
     def _build_admin_tab(self) -> QWidget:
-        w = QWidget(); w.setStyleSheet(f"background:{COLOR_BG};")
+        w = QWidget()
         vl = QVBoxLayout(w); vl.setContentsMargins(16, 12, 16, 12); vl.setSpacing(8)
 
         # Tabla de usuarios
-        lbl = QLabel("Usuarios registrados"); lbl.setStyleSheet(f"font:bold 10pt 'Segoe UI';color:{COLOR_PRIMARY};")
+        lbl = QLabel("Usuarios registrados"); lbl.setStyleSheet("font: bold 10pt 'Segoe UI';")
         vl.addWidget(lbl)
         self._tbl_users = QTableWidget(0, 4)
         self._tbl_users.setHorizontalHeaderLabels(["Usuario", "Nombre", "Rol", "Activo"])
@@ -463,17 +307,16 @@ class AccountDialog(QDialog):
         vl.addWidget(self._tbl_users)
         self._refresh_users_table()
 
-        sep = QFrame(); sep.setFrameShape(QFrame.HLine); sep.setStyleSheet(_SEP); vl.addWidget(sep)
+        sep = QFrame(); sep.setFrameShape(QFrame.HLine); vl.addWidget(sep)
 
         # Formulario crear usuario
-        lbl2 = QLabel("Crear nuevo usuario"); lbl2.setStyleSheet(f"font:bold 10pt 'Segoe UI';color:{COLOR_ACCENT};")
+        lbl2 = QLabel("Crear nuevo usuario"); lbl2.setStyleSheet("font: bold 10pt 'Segoe UI';")
         vl.addWidget(lbl2)
         form2 = QFormLayout(); form2.setSpacing(6); form2.setLabelAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        self.txt_new_user   = QLineEdit(); self.txt_new_user.setPlaceholderText("nombre_usuario"); self.txt_new_user.setStyleSheet(_LINEEDIT)
-        self.txt_new_nombre = QLineEdit(); self.txt_new_nombre.setPlaceholderText("Nombre Apellido"); self.txt_new_nombre.setStyleSheet(_LINEEDIT)
-        self.txt_new_pass   = QLineEdit(); self.txt_new_pass.setPlaceholderText("Contraseña inicial"); self.txt_new_pass.setEchoMode(QLineEdit.Password); self.txt_new_pass.setStyleSheet(_LINEEDIT)
+        self.txt_new_user   = QLineEdit(); self.txt_new_user.setPlaceholderText("nombre_usuario")
+        self.txt_new_nombre = QLineEdit(); self.txt_new_nombre.setPlaceholderText("Nombre Apellido")
+        self.txt_new_pass   = QLineEdit(); self.txt_new_pass.setPlaceholderText("Contraseña inicial"); self.txt_new_pass.setEchoMode(QLineEdit.Password)
         self.cmb_new_rol    = QComboBox(); self.cmb_new_rol.addItems(["operador", "admin"])
-        self.cmb_new_rol.setStyleSheet(f"QComboBox{{font:10pt 'Segoe UI';padding:4px 8px;border:1px solid #C5CAE9;border-radius:4px;background:#F7F8FC;color:#1A2052;}}")
         form2.addRow("Usuario:", self.txt_new_user)
         form2.addRow("Nombre:", self.txt_new_nombre)
         form2.addRow("Contraseña:", self.txt_new_pass)
@@ -481,7 +324,7 @@ class AccountDialog(QDialog):
         vl.addLayout(form2)
         self._lbl_admin_msg = QLabel(""); self._lbl_admin_msg.setAlignment(Qt.AlignCenter); vl.addWidget(self._lbl_admin_msg)
         row = QHBoxLayout()
-        btn_create = QPushButton("➕  Crear usuario"); btn_create.setStyleSheet(_BTN_PRIMARY); btn_create.clicked.connect(self._create_user)
+        btn_create = QPushButton("➕  Crear usuario"); btn_create.setObjectName("btnPrimary"); btn_create.clicked.connect(self._create_user)
         row.addStretch(); row.addWidget(btn_create); vl.addLayout(row)
         return w
 
@@ -524,49 +367,181 @@ class AccountDialog(QDialog):
 
 
 class PreferencesDialog(QDialog):
+    """
+    Diálogo de preferencias con selector de 4 temas y personalización de colores.
+    El cambio se aplica en vivo al confirmar.
+    """
+    # Nombres mostrados en el ComboBox (orden = orden en THEMES dict)
+    _THEME_LABELS = ["☀  Claro  (corporativo)", "🌑  Oscuro", "🌿  Soft  (jornada larga)", "🎨  Personalizado"]
+    _THEME_KEYS   = ["claro", "oscuro", "soft", "personalizado"]
+
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Preferencias")
-        self.setFixedSize(420, 260)
+        self.setWindowTitle("Preferencias — V-Metric")
+        self.setMinimumSize(520, 420)
         self.setWindowFlag(Qt.WindowContextHelpButtonHint, False)
+        if _ICON_PATH.exists():
+            from PySide6.QtGui import QIcon
+            self.setWindowIcon(QIcon(str(_ICON_PATH)))
         self._prefs = _load_prefs()
-        self.setStyleSheet(f"QDialog{{background:{COLOR_BG};}} QLabel{{font:9pt 'Segoe UI';color:{COLOR_TEXT};}}")
-        vl = QVBoxLayout(self); vl.setContentsMargins(28, 24, 28, 20); vl.setSpacing(12)
-        lbl = QLabel("Preferencias")
-        lbl.setStyleSheet(f"font: bold 14pt 'Segoe UI'; color:{COLOR_PRIMARY};")
-        vl.addWidget(lbl)
-        form = QFormLayout(); form.setSpacing(10); form.setLabelAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        # Tema
+        self._custom_colors: dict = dict(self._prefs.get("custom_colors", {}))
+        self._swatch_btns: dict = {}   # field_key → QPushButton
+        self._build_ui()
+
+    def _build_ui(self):
+        vl = QVBoxLayout(self); vl.setContentsMargins(0, 0, 0, 0); vl.setSpacing(0)
+
+        # Header
+        hdr = QWidget(); hdr.setObjectName("dialogHeader")
+        hl = QHBoxLayout(hdr); hl.setContentsMargins(20, 14, 20, 14)
+        lbl_h = QLabel("⚙  Preferencias"); lbl_h.setObjectName("dialogHeader")
+        lbl_h.setStyleSheet(f"font: bold 14pt 'Segoe UI'; color: {_ACTIVE_TOKENS.text_header}; background: transparent;")
+        hl.addWidget(lbl_h); hl.addStretch()
+        vl.addWidget(hdr)
+
+        body = QWidget(); vl.addWidget(body, 1)
+        bl = QVBoxLayout(body); bl.setContentsMargins(24, 18, 24, 18); bl.setSpacing(14)
+
+        # ── Tema ──
+        grp_tema = QGroupBox("🎨  Tema de interfaz"); grp_tema.setProperty("accent", "false")
+        tgl = QVBoxLayout(grp_tema); tgl.setContentsMargins(12, 14, 12, 12); tgl.setSpacing(8)
+
+        row_cmb = QHBoxLayout()
+        lbl_tm = QLabel("Seleccionar tema:"); lbl_tm.setFixedWidth(130)
         self.cmb_theme = QComboBox()
-        self.cmb_theme.addItems(["Claro", "Oscuro", "Automático (horario)"])
-        theme_map = {"light": 0, "dark": 1, "auto": 2}
-        self.cmb_theme.setCurrentIndex(theme_map.get(self._prefs.get("theme", "light"), 0))
-        self.cmb_theme.setStyleSheet(f"QComboBox{{font:10pt 'Segoe UI'; padding:4px 8px; border:1px solid #C5CAE9; border-radius:4px; background:#F7F8FC; color:#1A2052;}}")
-        form.addRow("Tema de interfaz:", self.cmb_theme)
-        # Decimales
+        self.cmb_theme.addItems(self._THEME_LABELS)
+        current_theme = self._prefs.get("theme", "claro")
+        idx = self._THEME_KEYS.index(current_theme) if current_theme in self._THEME_KEYS else 0
+        self.cmb_theme.setCurrentIndex(idx)
+        self.cmb_theme.currentIndexChanged.connect(self._on_theme_changed)
+        row_cmb.addWidget(lbl_tm); row_cmb.addWidget(self.cmb_theme, 1)
+        tgl.addLayout(row_cmb)
+
+        # Preview del tema
+        self._lbl_preview = QLabel()
+        self._lbl_preview.setWordWrap(True)
+        self._lbl_preview.setStyleSheet("font: italic 9pt 'Segoe UI'; padding: 4px;")
+        tgl.addWidget(self._lbl_preview)
+        self._update_preview(idx)
+        bl.addWidget(grp_tema)
+
+        # ── Colores personalizados ──
+        self._grp_custom = QGroupBox("🎨  Colores personalizados")
+        self._grp_custom.setProperty("accent", "true")
+        cgl = QVBoxLayout(self._grp_custom); cgl.setContentsMargins(12, 14, 12, 12); cgl.setSpacing(6)
+        lbl_info = QLabel("Ajusta los colores base del tema personalizado:")
+        lbl_info.setStyleSheet("font: italic 9pt 'Segoe UI';")
+        cgl.addWidget(lbl_info)
+        warn_lbl = QLabel("⚠  El contraste mínimo WCAG AA es 4.5:1. Los valores inválidos se marcan en rojo.")
+        warn_lbl.setWordWrap(True)
+        warn_lbl.setStyleSheet("font: 8pt 'Segoe UI'; color: #888;")
+        cgl.addWidget(warn_lbl)
+        self._contrast_labels: dict = {}
+        for field_key, field_label in CUSTOM_FIELDS:
+            row_c = QHBoxLayout()
+            lbl_c = QLabel(f"{field_label}:"); lbl_c.setFixedWidth(160)
+            current_val = self._custom_colors.get(field_key,
+                          getattr(THEME_CLARO, field_key, "#29306A"))
+            swatch = QPushButton()
+            swatch.setObjectName("colorSwatch")
+            swatch.setFixedSize(48, 26)
+            swatch.setStyleSheet(f"background: {current_val}; border: 2px solid #888; border-radius:4px;")
+            swatch.setToolTip(current_val)
+            swatch.clicked.connect(lambda _, fk=field_key: self._pick_color(fk))
+            self._swatch_btns[field_key] = swatch
+            lbl_hex = QLabel(current_val)
+            lbl_hex.setStyleSheet("font: 8pt 'Courier New'; min-width: 70px;")
+            self._contrast_labels[field_key] = lbl_hex
+            row_c.addWidget(lbl_c); row_c.addWidget(swatch); row_c.addWidget(lbl_hex); row_c.addStretch()
+            cgl.addLayout(row_c)
+        bl.addWidget(self._grp_custom)
+        self._grp_custom.setVisible(idx == 3)  # solo visible en "Personalizado"
+
+        # ── Decimales ──
+        grp_dec = QGroupBox("🔢  Precisión numérica")
+        dgl = QHBoxLayout(grp_dec); dgl.setContentsMargins(12, 14, 12, 12); dgl.setSpacing(10)
+        lbl_dec = QLabel("Decimales en resultados:"); lbl_dec.setFixedWidth(190)
         self.txt_decimals = QLineEdit(str(self._prefs.get("decimals", 3)))
-        self.txt_decimals.setStyleSheet(_LINEEDIT); self.txt_decimals.setFixedWidth(60)
-        form.addRow("Decimales en resultados:", self.txt_decimals)
-        vl.addLayout(form)
-        vl.addStretch()
-        row = QHBoxLayout()
-        btn_cancel = QPushButton("Cancelar"); btn_cancel.setStyleSheet(_BTN_SECONDARY); btn_cancel.clicked.connect(self.reject)
-        btn_save   = QPushButton("Guardar"); btn_save.setStyleSheet(_BTN_PRIMARY); btn_save.clicked.connect(self._save)
-        row.addStretch(); row.addWidget(btn_cancel); row.addWidget(btn_save); vl.addLayout(row)
+        self.txt_decimals.setFixedWidth(60)
+        dgl.addWidget(lbl_dec); dgl.addWidget(self.txt_decimals); dgl.addStretch()
+        bl.addWidget(grp_dec)
+        bl.addStretch()
+
+        # Botones
+        row_btns = QHBoxLayout()
+        btn_reset = QPushButton("↺  Restaurar defaults")
+        btn_reset.setObjectName("btnSecondary"); btn_reset.clicked.connect(self._reset_custom)
+        btn_cancel = QPushButton("Cancelar")
+        btn_cancel.setObjectName("btnSecondary"); btn_cancel.clicked.connect(self.reject)
+        btn_save = QPushButton("✓  Guardar y aplicar")
+        btn_save.setObjectName("btnPrimary"); btn_save.clicked.connect(self._save)
+        row_btns.addWidget(btn_reset); row_btns.addStretch()
+        row_btns.addWidget(btn_cancel); row_btns.addWidget(btn_save)
+        bl.addLayout(row_btns)
+
+    def _on_theme_changed(self, idx: int):
+        self._grp_custom.setVisible(idx == 3)
+        self._update_preview(idx)
+        self.adjustSize()
+
+    def _update_preview(self, idx: int):
+        descs = [
+            "Paleta corporativa — fondo claro, azul marino #29306A, acento naranja y verde menta.",
+            "Escala de grises sobria — ideal para trabajo nocturno. Acentos mínimos.",
+            "Tonos cálidos y terrosos — pensado para jornadas largas frente a pantalla.",
+            "Define tus propios colores. Se aplican sobre la estructura del tema Claro.",
+        ]
+        self._lbl_preview.setText(descs[idx] if idx < len(descs) else "")
+
+    def _pick_color(self, field_key: str):
+        from PySide6.QtWidgets import QColorDialog
+        from PySide6.QtGui import QColor
+        current = self._custom_colors.get(field_key, getattr(THEME_CLARO, field_key, "#29306A"))
+        color = QColorDialog.getColor(QColor(current), self, f"Selecciona color — {field_key}")
+        if not color.isValid(): return
+        hex_val = color.name().upper()
+        self._custom_colors[field_key] = hex_val
+        swatch = self._swatch_btns[field_key]
+        swatch.setStyleSheet(f"background: {hex_val}; border: 2px solid #888; border-radius:4px;")
+        swatch.setToolTip(hex_val)
+        lbl = self._contrast_labels[field_key]
+        lbl.setText(hex_val)
+        # Validar contraste con fondo base
+        bg = self._custom_colors.get("bg_base", THEME_CLARO.bg_base)
+        if field_key in ("text_base", "primary", "secondary"):
+            ok = contrast_ok(hex_val, bg)
+            lbl.setStyleSheet(
+                f"font: 8pt 'Courier New'; min-width:70px; color: {'#27AE60' if ok else '#C0392B'};"
+            )
+
+    def _reset_custom(self):
+        """Restaura los colores personalizados a los defaults de Claro."""
+        self._custom_colors.clear()
+        for field_key, _ in CUSTOM_FIELDS:
+            val = getattr(THEME_CLARO, field_key, "#29306A")
+            self._custom_colors[field_key] = val
+            swatch = self._swatch_btns[field_key]
+            swatch.setStyleSheet(f"background: {val}; border: 2px solid #888; border-radius:4px;")
+            swatch.setToolTip(val)
+            lbl = self._contrast_labels[field_key]
+            lbl.setText(val)
+            lbl.setStyleSheet("font: 8pt 'Courier New'; min-width:70px;")
 
     def _save(self):
-        theme_map = {0: "light", 1: "dark", 2: "auto"}
+        idx = self.cmb_theme.currentIndex()
         try:
             decimals = max(0, min(6, int(self.txt_decimals.text().strip())))
         except ValueError:
             decimals = 3
-        self._prefs["theme"] = theme_map[self.cmb_theme.currentIndex()]
+        self._prefs["theme"] = self._THEME_KEYS[idx]
         self._prefs["decimals"] = decimals
+        self._prefs["custom_colors"] = self._custom_colors
         _save_prefs(self._prefs)
-        # Aplicar tema inmediatamente sin necesidad de reiniciar
+        # Aplicar tema en vivo — afecta toda la aplicación excepto el login
         app = QApplication.instance()
         if app:
-            _apply_theme(app, self._prefs["theme"])
+            _apply_theme(app, self._prefs["theme"],
+                         self._custom_colors if idx == 3 else None)
         self.accept()
 
 
@@ -613,9 +588,8 @@ class HelpDialog(QDialog):
         self.setWindowFlag(Qt.WindowContextHelpButtonHint, False)
         vl = QVBoxLayout(self); vl.setContentsMargins(0, 0, 0, 12)
         browser = QTextBrowser(); browser.setHtml(_HELP_HTML)
-        browser.setStyleSheet("QTextBrowser{border:none; background:#FAFBFF;}")
         vl.addWidget(browser)
-        btn = QPushButton("Cerrar"); btn.setStyleSheet(_BTN_PRIMARY); btn.setFixedWidth(100)
+        btn = QPushButton("Cerrar"); btn.setObjectName("btnPrimary"); btn.setFixedWidth(100)
         btn.clicked.connect(self.accept)
         row = QHBoxLayout(); row.addStretch(); row.addWidget(btn); vl.addLayout(row)
 
@@ -978,29 +952,9 @@ class DemViewerWidget(QWidget):
 # ─────────────────────────────────────────────────────────────────────────────
 
 class HistoryPanel(QWidget):
-    _BTN = """
-        QPushButton { font: bold 9pt "Segoe UI"; padding: 5px 14px; border: none;
-            border-radius: 4px 4px 0 0; background: #EAECF4; color: #555577; }
-        QPushButton:hover   { background: #D8DBF0; color: #29306A; }
-        QPushButton:checked { background: #29306A; color: white; border-bottom: 3px solid #F75C03; }
-    """
-    _TBL = """
-        QTableWidget { font: 9pt "Segoe UI"; border: none; background: #FAFBFF;
-            alternate-background-color: #F0F2FA; gridline-color: #E8EAF6; color: #222244; }
-        QHeaderView::section { background: qlineargradient(x1:0,y1:0,x2:0,y2:1,
-            stop:0 #3D4A9A, stop:1 #29306A); color: white; font: bold 9pt "Segoe UI";
-            padding: 5px 6px; border: none; border-right: 1px solid #4A58B8; }
-        QTableWidget::item { padding: 3px 6px; }
-        QTableWidget::item:selected { background: #29306A; color: white; }
-        QScrollBar:vertical { background: #F0F2FA; width: 7px; border-radius: 3px; }
-        QScrollBar::handle:vertical { background: #C0C5E0; border-radius: 3px; min-height: 24px; }
-        QScrollBar::handle:vertical:hover { background: #29306A; }
-        QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
-    """
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setMinimumHeight(80)
-        self.setStyleSheet("background: #FFFFFF;")
         self._build_ui()
 
     def _build_ui(self):
@@ -1009,12 +963,11 @@ class HistoryPanel(QWidget):
         bl  = QHBoxLayout(bar); bl.setContentsMargins(2, 0, 0, 0); bl.setSpacing(3)
         self._btn_group = QButtonGroup(self); self._btn_group.setExclusive(True)
         for label, idx in [("📋  Mediciones", 0), ("🗺  DEMs", 1), ("🖼  Imágenes", 2)]:
-            btn = QPushButton(label); btn.setCheckable(True); btn.setStyleSheet(self._BTN)
+            btn = QPushButton(label); btn.setCheckable(True); btn.setObjectName("histTab")
             self._btn_group.addButton(btn, idx); bl.addWidget(btn)
         bl.addStretch(); self._btn_group.button(0).setChecked(True)
         root.addWidget(bar)
-        sep = QFrame(); sep.setFrameShape(QFrame.HLine)
-        sep.setStyleSheet("color: #D0D4E8; margin: 0;"); sep.setFixedHeight(1)
+        sep = QFrame(); sep.setFrameShape(QFrame.HLine); sep.setFixedHeight(1)
         root.addWidget(sep)
         self._stack = QStackedWidget(); root.addWidget(self._stack)
         self.tbl_mediciones = self._make_table([
@@ -1034,13 +987,13 @@ class HistoryPanel(QWidget):
         tbl.verticalHeader().setVisible(False)
         tbl.setEditTriggers(QTableWidget.NoEditTriggers)
         tbl.setSelectionBehavior(QTableWidget.SelectRows)
-        tbl.setAlternatingRowColors(True); tbl.setStyleSheet(self._TBL); tbl.setShowGrid(True)
+        tbl.setAlternatingRowColors(True); tbl.setShowGrid(True)
         return tbl
 
     def _make_placeholder(self, msg):
-        w = QWidget(); w.setStyleSheet("background: #FAFBFF;")
+        w = QWidget()
         lbl = QLabel(msg); lbl.setAlignment(Qt.AlignCenter)
-        lbl.setStyleSheet("color: #9098B5; font: italic 10pt 'Segoe UI';")
+        lbl.setStyleSheet("font: italic 10pt 'Segoe UI';")
         QVBoxLayout(w).addWidget(lbl); return w
 
     def load_reservorio(self, codigo: str) -> None:
@@ -1105,7 +1058,6 @@ class MainWindow(QMainWindow):
             QMainWindow.AllowTabbedDocks |
             QMainWindow.AllowNestedDocks
         )
-        self.setStyleSheet("QMainWindow { background: #EAECF4; }")
 
         self._build_central()
         self._build_params_dock()
@@ -1133,29 +1085,23 @@ class MainWindow(QMainWindow):
     def _build_central(self):
         # Header bar
         header = QWidget(); header.setFixedHeight(56)
-        header.setStyleSheet(
-            "background: qlineargradient(x1:0,y1:0,x2:1,y2:0,"
-            "stop:0 #1A2052,stop:0.5 #29306A,stop:1 #3D4A9A);"
-            "border-bottom: 2px solid #F75C03;"
-        )
+        header.setObjectName("headerBar")
         hl = QHBoxLayout(header); hl.setContentsMargins(18, 8, 18, 8); hl.setSpacing(12)
-        accent = QWidget(); accent.setFixedSize(4, 32)
-        accent.setStyleSheet("background: #F75C03; border-radius: 2px;"); hl.addWidget(accent)
         lbl_title = QLabel(_APP_NAME)
-        lbl_title.setStyleSheet("color:white; font: bold 14pt 'Segoe UI'; background:transparent; letter-spacing:1px;")
+        lbl_title.setStyleSheet("font: bold 14pt 'Segoe UI'; letter-spacing: 1px;")
         hl.addWidget(lbl_title)
         lbl_sub = QLabel("— Cálculo de volúmenes de pozas")
-        lbl_sub.setStyleSheet("color:rgba(255,255,255,0.55); font:10pt 'Segoe UI'; background:transparent;")
+        lbl_sub.setStyleSheet("font: 10pt 'Segoe UI';")
         hl.addWidget(lbl_sub); hl.addStretch()
 
         # Viewer toolbar
         toolbar = QWidget()
-        toolbar.setStyleSheet("background: #EAECF4; border-bottom: 1px solid #C8CBE0;")
+        toolbar.setObjectName("viewerToolbar")
         tl = QHBoxLayout(toolbar); tl.setContentsMargins(6, 3, 6, 3); tl.setSpacing(4)
         self.btn_pick_ortho = QPushButton("📂  Cargar ortofoto…")
         self.btn_ortho      = QPushButton("🛰  Ortofoto")
         self.btn_ortho.setCheckable(True); self.btn_ortho.setEnabled(False)
-        sep1 = QFrame(); sep1.setFrameShape(QFrame.VLine); sep1.setStyleSheet(_SEP)
+        sep1 = QFrame(); sep1.setFrameShape(QFrame.VLine)
         self.btn_draw_poly   = QPushButton("✏  Dibujar")
         self.btn_cursor_poly = QPushButton("↖  Cursor")
         self.btn_clear_poly  = QPushButton("🗑  Borrar")
@@ -1163,7 +1109,7 @@ class MainWindow(QMainWindow):
         self.btn_cursor_poly.setCheckable(True); self.btn_cursor_poly.setEnabled(False)
         for b in (self.btn_pick_ortho, self.btn_ortho, self.btn_draw_poly,
                   self.btn_cursor_poly, self.btn_clear_poly):
-            b.setStyleSheet(_BTN); tl.addWidget(b)
+            tl.addWidget(b)
             if b is self.btn_ortho: tl.addWidget(sep1)
         tl.addStretch()
 
@@ -1182,80 +1128,55 @@ class MainWindow(QMainWindow):
 
     def _build_params_dock(self):
         panel = QWidget(); panel.setMinimumWidth(270)
-        panel.setStyleSheet("background: #F4F5FB;")
         vl = QVBoxLayout(panel); vl.setContentsMargins(10, 10, 10, 10); vl.setSpacing(10)
 
         # Reservorio
-        grp_res = QGroupBox("🗺  Reservorio"); grp_res.setStyleSheet(_GROUPBOX)
+        grp_res = QGroupBox("🗺  Reservorio")
         rgl = QVBoxLayout(grp_res); rgl.setContentsMargins(10, 14, 10, 10)
         self.cmb_reservorio = QComboBox()
         self.cmb_reservorio.addItem("— Seleccionar —")
         self.cmb_reservorio.addItems([f"Reservorio {i}" for i in range(1, 11)])
-        self.cmb_reservorio.setStyleSheet(
-            "QComboBox{font:10pt 'Segoe UI';padding:5px 8px;border:1px solid #C5CAE9;"
-            "border-radius:4px;background:#F7F8FC;color:#1A2052;}"
-            "QComboBox:focus{border:2px solid #29306A;}"
-            "QComboBox QAbstractItemView{background:#29306A;color:white;"
-            "selection-background-color:#F75C03;}")
         rgl.addWidget(self.cmb_reservorio)
         vl.addWidget(grp_res)
 
         # Archivos DEM / Contorno
-        grp_files = QGroupBox("📂  Archivos"); grp_files.setStyleSheet(_GROUPBOX)
+        grp_files = QGroupBox("📂  Archivos")
         fgl = QVBoxLayout(grp_files); fgl.setContentsMargins(10, 14, 10, 10); fgl.setSpacing(8)
         row_btns = QHBoxLayout()
-        self.btn_pick_dem  = QPushButton("Cargar DEM…");     self.btn_pick_dem.setStyleSheet(_BTN_SECONDARY)
-        self.btn_pick_mask = QPushButton("Cargar contorno…"); self.btn_pick_mask.setStyleSheet(_BTN_SECONDARY)
+        self.btn_pick_dem  = QPushButton("Cargar DEM…");     self.btn_pick_dem.setObjectName("btnSecondary")
+        self.btn_pick_mask = QPushButton("Cargar contorno…"); self.btn_pick_mask.setObjectName("btnSecondary")
         row_btns.addWidget(self.btn_pick_dem); row_btns.addWidget(self.btn_pick_mask)
         fgl.addLayout(row_btns)
         self.chk_use_mask = QCheckBox("Usar contorno activo"); self.chk_use_mask.setChecked(True)
-        self.chk_use_mask.setStyleSheet(f"QCheckBox{{font:9pt 'Segoe UI';color:{COLOR_PRIMARY};spacing:6px;}}"
-                                         f"QCheckBox::indicator{{width:14px;height:14px;border:2px solid {COLOR_PRIMARY};"
-                                         f"border-radius:3px;background:white;}}"
-                                         f"QCheckBox::indicator:checked{{background:{COLOR_PRIMARY};}}")
         fgl.addWidget(self.chk_use_mask)
         self.lbl_paths = QLabel("Sin DEM cargado")
         self.lbl_paths.setWordWrap(True)
-        self.lbl_paths.setStyleSheet("color:#808B96;font:italic 8pt 'Segoe UI';"
-                                      "background:#F7F8FC;border:1px solid #E0E3F0;"
-                                      "border-radius:4px;padding:3px 6px;")
         fgl.addWidget(self.lbl_paths)
         vl.addWidget(grp_files)
 
         # Parámetros de cálculo
-        grp_calc = QGroupBox("⚙  Parámetros de cálculo"); grp_calc.setStyleSheet(_GROUPBOX_ACCENT)
+        grp_calc = QGroupBox("⚙  Parámetros de cálculo"); grp_calc.setProperty("accent", "true")
         cgl = QFormLayout(grp_calc); cgl.setSpacing(10); cgl.setContentsMargins(10, 14, 10, 12)
         cgl.setLabelAlignment(Qt.AlignRight | Qt.AlignVCenter)
         self.txt_salt  = QLineEdit(); self.txt_salt.setPlaceholderText("ej. 3412.500")
         self.txt_water = QLineEdit(); self.txt_water.setPlaceholderText("ej. 3415.200")
         self.txt_occ   = QLineEdit(); self.txt_occ.setPlaceholderText("0.00 – 1.00")
-        for t in (self.txt_salt, self.txt_water, self.txt_occ): t.setStyleSheet(_LINEEDIT)
         cgl.addRow("Cota sal (m):", self.txt_salt)
         cgl.addRow("Cota agua (m):", self.txt_water)
         cgl.addRow("Fracción ocluida:", self.txt_occ)
         vl.addWidget(grp_calc)
 
         # Acciones
-        grp_act = QGroupBox("▶  Acciones"); grp_act.setStyleSheet(_GROUPBOX)
+        grp_act = QGroupBox("▶  Acciones")
         agl = QVBoxLayout(grp_act); agl.setContentsMargins(10, 14, 10, 10); agl.setSpacing(6)
-        self.btn_calculate  = QPushButton("⚡  Calcular volúmenes")
-        self.btn_calculate.setStyleSheet(_BTN_PRIMARY)
-        self.btn_register   = QPushButton("📝  Registrar medición")
-        _BTN_ACCENT = """
-            QPushButton {
-                font: bold 10pt "Segoe UI"; color: white; border: none; border-radius: 5px;
-                padding: 7px 14px; min-height: 28px;
-                background: qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #E05A00,stop:1 #C04500);
-            }
-            QPushButton:hover   { background: #F75C03; }
-            QPushButton:pressed { background: #D44000; }
-            QPushButton:disabled{ background: #DDBBAA; color: #FFFFFF88; }
-        """
-        self.btn_register.setStyleSheet(_BTN_ACCENT)
+        self.btn_calculate = QPushButton("⚡  Calcular volúmenes")
+        self.btn_calculate.setObjectName("btnPrimary")
+        self.btn_register  = QPushButton("📝  Registrar medición")
+        self.btn_register.setObjectName("btnAccent")
         self.btn_register.setEnabled(False)
         row_exp = QHBoxLayout()
-        self.btn_export_csv = QPushButton("📄  CSV"); self.btn_export_csv.setStyleSheet(_BTN_SECONDARY)
-        self.btn_clear      = QPushButton("🗑  Limpiar"); self.btn_clear.setStyleSheet(_BTN_SECONDARY)
+        self.btn_export_csv = QPushButton("📄  CSV"); self.btn_export_csv.setObjectName("btnSecondary")
+        self.btn_clear      = QPushButton("🗑  Limpiar"); self.btn_clear.setObjectName("btnSecondary")
         row_exp.addWidget(self.btn_export_csv); row_exp.addWidget(self.btn_clear)
         agl.addWidget(self.btn_calculate)
         agl.addWidget(self.btn_register)
@@ -1264,7 +1185,6 @@ class MainWindow(QMainWindow):
         vl.addStretch()
 
         dock = QDockWidget("⚙  Parámetros", self)
-        dock.setStyleSheet(_DOCK_STYLE)
         dock.setWidget(panel)
         dock.setFeatures(QDockWidget.DockWidgetMovable | QDockWidget.DockWidgetFloatable | QDockWidget.DockWidgetClosable)
         self.addDockWidget(Qt.RightDockWidgetArea, dock)
@@ -1274,31 +1194,16 @@ class MainWindow(QMainWindow):
 
     def _build_results_dock(self):
         panel = QWidget(); panel.setMinimumWidth(260)
-        panel.setStyleSheet("background:#FFFFFF;")
         vl = QVBoxLayout(panel); vl.setContentsMargins(0, 0, 0, 0); vl.setSpacing(0)
         self.tree = QTreeWidget()
         self.tree.setColumnCount(3)
         self.tree.setHeaderLabels(["Parámetro", "Valor", "Unidad"])
         self.tree.setColumnWidth(0, 200); self.tree.setColumnWidth(1, 100); self.tree.setColumnWidth(2, 60)
-        self.tree.setStyleSheet("""
-            QTreeWidget { font: 9pt "Segoe UI"; border: none; background: #FAFBFF;
-                alternate-background-color: #F0F2FA; color: #222244; }
-            QHeaderView::section { background: qlineargradient(x1:0,y1:0,x2:0,y2:1,
-                stop:0 #3D4A9A, stop:1 #29306A); color: white; font: bold 9pt "Segoe UI";
-                padding: 5px 6px; border: none; border-right: 1px solid #4A58B8; }
-            QTreeWidget::item { padding: 2px 4px; }
-            QTreeWidget::item:selected { background: #29306A; color: white; }
-            QScrollBar:vertical { background: #F0F2FA; width: 7px; border-radius: 3px; }
-            QScrollBar::handle:vertical { background: #C0C5E0; border-radius: 3px; min-height: 24px; }
-            QScrollBar::handle:vertical:hover { background: #29306A; }
-            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
-        """)
         self.tree.setAlternatingRowColors(True)
         self.tree.setRootIsDecorated(False)
         vl.addWidget(self.tree)
 
         dock = QDockWidget("📊  Resultados", self)
-        dock.setStyleSheet(_DOCK_STYLE)
         dock.setWidget(panel)
         dock.setFeatures(QDockWidget.DockWidgetMovable | QDockWidget.DockWidgetFloatable | QDockWidget.DockWidgetClosable)
         self.addDockWidget(Qt.RightDockWidgetArea, dock)
@@ -1309,7 +1214,7 @@ class MainWindow(QMainWindow):
     def _build_history_dock(self):
         self.history_panel = HistoryPanel()
         dock = QDockWidget("📋  Historial", self)
-        dock.setStyleSheet(_DOCK_STYLE)
+
         dock.setWidget(self.history_panel)
         dock.setFeatures(QDockWidget.DockWidgetMovable | QDockWidget.DockWidgetFloatable | QDockWidget.DockWidgetClosable)
         self.addDockWidget(Qt.BottomDockWidgetArea, dock)
@@ -1320,28 +1225,15 @@ class MainWindow(QMainWindow):
 
     def _build_status_bar(self):
         sb = self.statusBar()
-        sb.setStyleSheet(
-            "QStatusBar { background:#EAECF4; border-top:1px solid #C8CBE0; font:9pt 'Segoe UI'; }"
-            "QStatusBar::item { border:none; }"
-        )
         self._spinner = SpinnerLabel()
-        self._spinner.setStyleSheet("font:bold 12pt 'Segoe UI'; color:#F75C03; padding:0 2px;")
         self._status_label = QLabel("Listo")
-        self._status_label.setStyleSheet("color:#555577; padding:2px 6px;")
         self._progress_bar = QProgressBar()
         self._progress_bar.setFixedSize(160, 12)
         self._progress_bar.setTextVisible(False)
-        self._progress_bar.setStyleSheet(
-            "QProgressBar{border:1px solid #C8CBE0;border-radius:4px;background:#F0F2FA;}"
-            "QProgressBar::chunk{background:qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 #3D4A9A,stop:1 #F75C03);border-radius:3px;}")
         self._progress_bar.hide()
         user_str = self._user_nombre or self._user_username or "sin sesión"
         self._user_badge = QPushButton(f"  👤  {user_str}  ")
-        self._user_badge.setStyleSheet(
-            "QPushButton{background:#29306A;color:white;font:bold 9pt 'Segoe UI';"
-            "border:none;border-radius:3px;padding:2px 10px;margin:2px 4px;}"
-            "QPushButton:hover{background:#3D4A9A;}"
-            "QPushButton:pressed{background:#F75C03;}")
+        self._user_badge.setObjectName("userBadge")
         self._user_badge.setCursor(Qt.PointingHandCursor)
         self._user_badge.clicked.connect(self._show_account_dialog)
         sb.addWidget(self._spinner, 0)
@@ -1365,15 +1257,6 @@ class MainWindow(QMainWindow):
 
     def _build_menu_bar(self):
         mb = self.menuBar()
-        mb.setStyleSheet(
-            "QMenuBar{background:#29306A;color:white;font:9pt 'Segoe UI';padding:2px 0;}"
-            "QMenuBar::item{padding:4px 12px;border-radius:3px;}"
-            "QMenuBar::item:selected{background:rgba(255,255,255,0.2);}"
-            "QMenu{background:#29306A;color:white;border:1px solid #3D4A9A;font:9pt 'Segoe UI';}"
-            "QMenu::item{padding:6px 20px 6px 10px;}"
-            "QMenu::item:selected{background:#F75C03;border-radius:3px;}"
-            "QMenu::separator{height:1px;background:rgba(255,255,255,0.2);margin:3px 8px;}"
-        )
         # Opciones
         menu_opt = mb.addMenu("Opciones")
         act_acct = QAction("👤  Gestión de cuenta", self)
@@ -1769,7 +1652,7 @@ def main() -> None:
         app.setWindowIcon(QIcon(str(_ICON_PATH)))
     # Aplicar tema guardado antes de mostrar cualquier ventana
     prefs = _load_prefs()
-    _apply_theme(app, prefs.get("theme", "light"))
+    _apply_theme(app, prefs.get("theme", "claro"), prefs.get("custom_colors") or None)
     if _DB_AVAILABLE:
         dlg = LoginDialog()
         dlg.setWindowTitle(f"{_APP_NAME} — Inicio de sesión")
