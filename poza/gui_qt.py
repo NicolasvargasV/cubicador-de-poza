@@ -21,7 +21,13 @@ from PySide6.QtWidgets import (
 
 from .core import DemRaster, PondVolumeCalculator, DemError, PondVolumes
 from .masks import load_mask_shapes, MaskError, polygon_raster_to_geojson
-from .export import export_rows_to_csv, open_file_default_app, default_output_name
+from .export import (
+    export_rows_to_csv,
+    export_rows_to_google_sheets,
+    open_file_default_app,
+    open_url_default_app,
+    default_output_name,
+)
 from .viz import DemRenderer, OrthoRenderer
 
 try:
@@ -40,6 +46,7 @@ except ImportError:
 # ── Constantes de la app ──────────────────────────────────────────────────────
 _APP_NAME  = "V-Metric"
 _ICON_PATH = Path(__file__).parent.parent / "img" / "app.ico"
+GOOGLE_SHEETS_SPREADSHEET_ID = "1P5_JBl2xSwLC7E0HmThbPPXVC93ecKETgRCbZFI-j9M"
 
 # ── Sistema de temas centralizado ─────────────────────────────────────────────
 from .themes import (
@@ -1173,13 +1180,16 @@ class MainWindow(QMainWindow):
         self.btn_calculate.setObjectName("btnPrimary")
         self.btn_register  = QPushButton("📝  Registrar medición")
         self.btn_register.setObjectName("btnAccent")
-        self.btn_register.setEnabled(False)
+        self.btn_export_sheets = QPushButton("☁  Google Sheets")
+        self.btn_export_sheets.setProperty("outline", "true")
+        self.btn_export_sheets.setObjectName("btnSecondary")
         row_exp = QHBoxLayout()
         self.btn_export_csv = QPushButton("📄  CSV"); self.btn_export_csv.setObjectName("btnSecondary")
         self.btn_clear      = QPushButton("🗑  Limpiar"); self.btn_clear.setObjectName("btnSecondary")
         row_exp.addWidget(self.btn_export_csv); row_exp.addWidget(self.btn_clear)
         agl.addWidget(self.btn_calculate)
         agl.addWidget(self.btn_register)
+        agl.addWidget(self.btn_export_sheets)
         agl.addLayout(row_exp)
         vl.addWidget(grp_act)
         vl.addStretch()
@@ -1300,6 +1310,7 @@ class MainWindow(QMainWindow):
     def _connect_signals(self):
         self.btn_pick_dem.clicked.connect(self.pick_dem)
         self.btn_pick_mask.clicked.connect(self.pick_mask)
+        self.btn_export_sheets.clicked.connect(self.export_google_sheets)
         self.chk_use_mask.toggled.connect(self._set_paths_label)
         self.btn_calculate.clicked.connect(self.calculate)
         self.btn_register.clicked.connect(self._register_medicion)
@@ -1634,6 +1645,84 @@ class MainWindow(QMainWindow):
             self._set_idle(f"CSV exportado: {Path(path).name}")
         except Exception as e:
             QMessageBox.critical(self, "Exportar CSV", str(e))
+
+    def export_google_sheets(self) -> None:
+        if not self.latest_rows:
+            QMessageBox.information(self, "Exportar", "Primero calcula resultados."); return
+            
+        import os
+        from datetime import datetime
+        
+        # Verificar si ya existe en las variables de entorno
+        if not os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"):
+            # Buscar en la carpeta raíz
+            base_dir = Path(__file__).parent.parent
+            local_cred = base_dir / "credentials.json"
+            if local_cred.exists():
+                os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = str(local_cred)
+            else:
+                # Buscar cualquier archivo .json en la carpeta raíz que parezca credencial
+                json_files = list(base_dir.glob("*.json"))
+                # Filtramos package.json si existe para evitar confusiones
+                json_files = [f for f in json_files if f.name != "package.json"]
+                
+                if json_files:
+                    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = str(json_files[0])
+                else:
+                    QMessageBox.warning(
+                        self,
+                        "Credenciales faltantes",
+                        "No se encontró un archivo .json de cuenta de servicio en la carpeta del proyecto.\n\n"
+                        "Por favor, coloca tu archivo JSON de Service Account en la carpeta raíz (ej. 'credentials.json')."
+                    )
+                    return
+
+        codigo = self.current_reservorio_codigo or "SIN_RESERVORIO"
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        sheet_title = f"Resultados_{codigo}_{ts}"
+
+        self._set_busy("Exportando a Google Sheets...")
+        QApplication.processEvents()
+
+        try:
+            res = export_rows_to_google_sheets(
+                GOOGLE_SHEETS_SPREADSHEET_ID,
+                self.latest_rows,
+                sheet_title=sheet_title,
+            )
+
+            self._audit(
+                "gsheets_exportado",
+                detalle={
+                    "reservorio": self.current_reservorio_codigo,
+                    "spreadsheet_id": GOOGLE_SHEETS_SPREADSHEET_ID,
+                    "worksheet": res.get("worksheet_title"),
+                },
+            )
+
+            # Abrir en navegador
+            try:
+                open_url_default_app(str(res.get("spreadsheet_url", "")))
+            except Exception:
+                pass
+                
+            self._set_idle(f"Exportado a Sheets: {res.get('worksheet_title')}")
+            
+            QMessageBox.information(
+                self,
+                "Google Sheets",
+                "Exportación completada.\n\n"
+                f"Hoja creada/actualizada: {res.get('worksheet_title')}\n"
+            )
+
+        except Exception as e:
+            self._set_idle("Error en exportación")
+            QMessageBox.critical(
+                self,
+                "Exportar a Google Sheets",
+                f"Error al exportar:\n{str(e)}\n\n"
+                "Verifica permisos de edición sobre el Spreadsheet y que las credenciales sean válidas."
+            )
 
     def clear_results(self):
         self.latest_result = None; self.latest_rows = []; self.tree.clear()
