@@ -1674,30 +1674,30 @@ class MainWindow(QMainWindow):
             
         import os
         from datetime import datetime
+        import json
         
-        # Verificar si ya existe en las variables de entorno
-        if not os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"):
-            # Buscar en la carpeta raíz
-            base_dir = Path(__file__).parent.parent
-            local_cred = base_dir / "credentials.json"
-            if local_cred.exists():
-                os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = str(local_cred)
-            else:
-                # Buscar cualquier archivo .json en la carpeta raíz que parezca credencial
-                json_files = list(base_dir.glob("*.json"))
-                # Filtramos package.json si existe para evitar confusiones
-                json_files = [f for f in json_files if f.name != "package.json"]
-                
-                if json_files:
-                    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = str(json_files[0])
-                else:
-                    QMessageBox.warning(
-                        self,
-                        "Credenciales faltantes",
-                        "No se encontró un archivo .json de cuenta de servicio en la carpeta del proyecto.\n\n"
-                        "Por favor, coloca tu archivo JSON de Service Account en la carpeta raíz (ej. 'credentials.json')."
-                    )
-                    return
+        # Usar SIEMPRE el credentials.json del proyecto para evitar credenciales equivocadas
+        base_dir = Path(__file__).parent.parent
+        local_cred = base_dir / "credentials.json"
+        if not local_cred.exists():
+            QMessageBox.warning(
+                self,
+                "Credenciales faltantes",
+                "No se encontró 'credentials.json' en la carpeta del proyecto.\n\n"
+                "Coloca tu archivo JSON de Service Account en la carpeta raíz con el nombre exacto 'credentials.json'."
+            )
+            return
+
+        # Sobrescribir variable de entorno por si el usuario tenía otra configurada
+        os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = str(local_cred)
+
+        # Leer email de la Service Account (sin mostrar claves)
+        service_account_email = None
+        try:
+            data = json.loads(local_cred.read_text(encoding="utf-8"))
+            service_account_email = data.get("client_email")
+        except Exception:
+            service_account_email = None
 
         codigo = self.current_reservorio_codigo or "SIN_RESERVORIO"
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -1728,6 +1728,7 @@ class MainWindow(QMainWindow):
                 GOOGLE_SHEETS_SPREADSHEET_ID,
                 rows_to_export,
                 sheet_title=sheet_title,
+                credentials_path=str(local_cred),
             )
 
             self._audit(
@@ -1750,11 +1751,19 @@ class MainWindow(QMainWindow):
 
         except Exception as e:
             self._set_idle("Error en exportación")
+            extra = ""
+            if service_account_email:
+                extra += (
+                    "\n\nImportante: comparte el Spreadsheet como *Editor* con esta cuenta de servicio:\n"
+                    f"{service_account_email}"
+                )
             QMessageBox.critical(
                 self,
                 "Exportar a Google Sheets",
-                f"Error al exportar:\n{str(e)}\n\n"
-                "Verifica permisos de edición sobre el Spreadsheet y que las credenciales sean válidas."
+                f"Error al exportar:\n{str(e) or repr(e)}\n\n"
+                "Verifica permisos de edición, que la API de Google Sheets esté habilitada en el proyecto, "
+                "y que las credenciales sean válidas."
+                + extra
             )
 
     def clear_results(self):

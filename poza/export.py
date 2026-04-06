@@ -55,6 +55,7 @@ def export_rows_to_google_sheets(
 
     try:
         import gspread  # type: ignore
+        from gspread.exceptions import APIError  # type: ignore
         import google.auth._helpers  # type: ignore
         from google.auth import default as google_auth_default  # type: ignore
         from google.oauth2.service_account import Credentials  # type: ignore
@@ -110,7 +111,39 @@ def export_rows_to_google_sheets(
     creds = _get_creds()
     client = gspread.authorize(creds)
 
-    sh = client.open_by_key(spreadsheet_id)
+    def _service_account_email() -> str | None:
+        return getattr(creds, "service_account_email", None)
+
+    def _format_open_error(err: Exception) -> str:
+        sa = _service_account_email()
+        prefix = "Error al abrir el Spreadsheet por ID."
+        if sa:
+            prefix += f" (Service Account: {sa})"
+
+        # gspread a veces envuelve APIError como PermissionError, perdiendo el mensaje.
+        cause = getattr(err, "__cause__", None)
+        if isinstance(err, PermissionError) and cause:
+            err = cause  # usar el error real
+
+        if isinstance(err, APIError):
+            detail = str(err)
+            if "sheets.googleapis.com" in detail and ("disabled" in detail.lower() or "has not been used" in detail.lower()):
+                return (
+                    f"{prefix}\n\n"
+                    "La Google Sheets API está deshabilitada o no se ha usado en este proyecto.\n"
+                    "Actívala en Google Cloud Console (Sheets API) y espera unos minutos para propagación.\n\n"
+                    f"Detalle: {detail}"
+                )
+            return f"{prefix}\n\nDetalle: {detail}"
+
+        # fallback genérico
+        msg = str(err) or repr(err)
+        return f"{prefix}\n\nDetalle: {msg}"
+
+    try:
+        sh = client.open_by_key(spreadsheet_id)
+    except Exception as e:
+        raise RuntimeError(_format_open_error(e)) from e
 
     # Buscar si ya existe la hoja o crear una nueva llamada "Cubicaciones"
     target_sheet_title = "Cubicaciones"
