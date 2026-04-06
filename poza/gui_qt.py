@@ -969,7 +969,7 @@ class HistoryPanel(QWidget):
         bar = QWidget(); bar.setStyleSheet("background: transparent;")
         bl  = QHBoxLayout(bar); bl.setContentsMargins(2, 0, 0, 0); bl.setSpacing(3)
         self._btn_group = QButtonGroup(self); self._btn_group.setExclusive(True)
-        for label, idx in [("📋  Mediciones", 0), ("🗺  DEMs", 1), ("🖼  Imágenes", 2)]:
+        for label, idx in [("📋  Mediciones", 0), ("🗺  DEMs", 1)]:
             btn = QPushButton(label); btn.setCheckable(True); btn.setObjectName("histTab")
             self._btn_group.addButton(btn, idx); bl.addWidget(btn)
         bl.addStretch(); self._btn_group.button(0).setChecked(True)
@@ -984,7 +984,6 @@ class HistoryPanel(QWidget):
         self.tbl_dems = self._make_table(["Fecha Carga", "Archivo", "Fecha Vuelo", "Cargado por"])
         self._stack.addWidget(self.tbl_mediciones)
         self._stack.addWidget(self.tbl_dems)
-        self._stack.addWidget(self._make_placeholder("📷  Módulo de imágenes fotogramétricas — próximamente."))
         self._btn_group.idClicked.connect(self._stack.setCurrentIndex)
 
     def _make_table(self, headers):
@@ -1065,6 +1064,8 @@ class MainWindow(QMainWindow):
             QMainWindow.AllowTabbedDocks |
             QMainWindow.AllowNestedDocks
         )
+        self.setCorner(Qt.BottomRightCorner, Qt.RightDockWidgetArea)
+        self.setCorner(Qt.BottomLeftCorner,  Qt.LeftDockWidgetArea)
 
         self._build_central()
         self._build_params_dock()
@@ -1082,10 +1083,21 @@ class MainWindow(QMainWindow):
         QTimer.singleShot(150, self._apply_default_sizes)
 
     def _apply_default_sizes(self):
-        """Ajusta proporciones 70% canvas / 30% panel derecho."""
+        """Ajusta proporciones 70% canvas / 30% panel derecho.
+        Divide la columna derecha: 65% parámetros / 35% resultados.
+        """
         w = self.width()
+        h = self.height()
         right_w = max(300, int(w * 0.30))
         self.resizeDocks([self._dock_params], [right_w], Qt.Horizontal)
+        # Altura: params 65%, resultados 35%
+        params_h = max(420, int(h * 0.65))
+        results_h = max(220, int(h * 0.35))
+        self.resizeDocks(
+            [self._dock_params, self._dock_results],
+            [params_h, results_h],
+            Qt.Vertical
+        )
 
     # ── Central widget ────────────────────────────────────────────────────────
 
@@ -1178,19 +1190,24 @@ class MainWindow(QMainWindow):
         agl = QVBoxLayout(grp_act); agl.setContentsMargins(10, 14, 10, 10); agl.setSpacing(6)
         self.btn_calculate = QPushButton("⚡  Calcular volúmenes")
         self.btn_calculate.setObjectName("btnPrimary")
-        self.btn_register  = QPushButton("📝  Registrar medición")
-        self.btn_register.setObjectName("btnAccent")
-        self.btn_export_sheets = QPushButton("☁  Google Sheets")
-        self.btn_export_sheets.setProperty("outline", "true")
-        self.btn_export_sheets.setObjectName("btnSecondary")
-        row_exp = QHBoxLayout()
-        self.btn_export_csv = QPushButton("📄  CSV"); self.btn_export_csv.setObjectName("btnSecondary")
-        self.btn_clear      = QPushButton("🗑  Limpiar"); self.btn_clear.setObjectName("btnSecondary")
-        row_exp.addWidget(self.btn_export_csv); row_exp.addWidget(self.btn_clear)
+        self.btn_export_sheets = QPushButton("📝  Registrar medición")
+        self.btn_export_sheets.setStyleSheet("""
+            QPushButton {
+                background-color: #38ab73; 
+                color: white; 
+                font-weight: bold; 
+                border-radius: 4px;
+                padding: 6px;
+            }
+            QPushButton:hover { background-color: #0d8a4d; }
+            QPushButton:pressed { background-color: #0a693a; }
+        """)
+        
+        self.btn_clear = QPushButton("🗑  Limpiar"); self.btn_clear.setObjectName("btnSecondary")
+        
         agl.addWidget(self.btn_calculate)
-        agl.addWidget(self.btn_register)
         agl.addWidget(self.btn_export_sheets)
-        agl.addLayout(row_exp)
+        agl.addWidget(self.btn_clear)
         vl.addWidget(grp_act)
         vl.addStretch()
 
@@ -1203,12 +1220,14 @@ class MainWindow(QMainWindow):
     # ── Dock: Resultados ──────────────────────────────────────────────────────
 
     def _build_results_dock(self):
-        panel = QWidget(); panel.setMinimumWidth(260)
+        panel = QWidget(); panel.setMinimumWidth(260); panel.setMinimumHeight(200)
         vl = QVBoxLayout(panel); vl.setContentsMargins(0, 0, 0, 0); vl.setSpacing(0)
         self.tree = QTreeWidget()
         self.tree.setColumnCount(3)
         self.tree.setHeaderLabels(["Parámetro", "Valor", "Unidad"])
-        self.tree.setColumnWidth(0, 200); self.tree.setColumnWidth(1, 100); self.tree.setColumnWidth(2, 60)
+        self.tree.header().setStretchLastSection(False)
+        self.tree.header().setSectionResizeMode(0, QHeaderView.Stretch)
+        self.tree.setColumnWidth(1, 110); self.tree.setColumnWidth(2, 70)
         self.tree.setAlternatingRowColors(True)
         self.tree.setRootIsDecorated(False)
         vl.addWidget(self.tree)
@@ -1310,11 +1329,9 @@ class MainWindow(QMainWindow):
     def _connect_signals(self):
         self.btn_pick_dem.clicked.connect(self.pick_dem)
         self.btn_pick_mask.clicked.connect(self.pick_mask)
-        self.btn_export_sheets.clicked.connect(self.export_google_sheets)
+        self.btn_export_sheets.clicked.connect(self.register_and_export)
         self.chk_use_mask.toggled.connect(self._set_paths_label)
         self.btn_calculate.clicked.connect(self.calculate)
-        self.btn_register.clicked.connect(self._register_medicion)
-        self.btn_export_csv.clicked.connect(self.export_csv)
         self.btn_clear.clicked.connect(self.clear_results)
         self.cmb_reservorio.currentIndexChanged.connect(self._on_reservorio_changed)
         self.btn_pick_ortho.clicked.connect(self.pick_ortho)
@@ -1572,7 +1589,7 @@ class MainWindow(QMainWindow):
             self._populate_table(self.latest_rows)
             self._dock_results.show()
             # Habilitar botón de registro explícito
-            self.btn_register.setEnabled(True)
+            self.btn_export_sheets.setEnabled(True)
             warns = []
             if res.salt_level  < res.dem_min or res.salt_level  > res.dem_max:
                 warns.append(f"  • Cota sal ({res.salt_level:.2f} m) fuera del rango DEM.")
@@ -1620,11 +1637,16 @@ class MainWindow(QMainWindow):
     def _register_medicion(self):
         """Guarda explícitamente el resultado calculado en el historial (DB + Firebase)."""
         if not self.latest_result:
-            QMessageBox.information(self, "Registrar", "Primero calcula los volúmenes."); return
+            QMessageBox.information(self, "Registrar", "Primero calcula los volúmenes."); return False
         self._set_busy("Registrando medición…")
         self._save_cubicacion(self.latest_result)
-        self.btn_register.setEnabled(False)  # evitar doble registro
+        self.btn_export_sheets.setEnabled(False)  # evitar doble registro
         self._set_idle("Medición registrada en el historial ✓")
+        return True
+
+    def register_and_export(self):
+        if self._register_medicion():
+            self.export_google_sheets()
 
     def _populate_table(self, rows):
         self.tree.clear()
@@ -1679,7 +1701,24 @@ class MainWindow(QMainWindow):
 
         codigo = self.current_reservorio_codigo or "SIN_RESERVORIO"
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        fecha_legible = datetime.now().strftime("%Y-%m-%d %H:%M")
         sheet_title = f"Resultados_{codigo}_{ts}"
+
+        # Filas de metadatos que se anteponen a los resultados
+        operador = self._user_nombre or self._user_username or "sin sesión"
+        meta_rows = [
+            ("Fecha",     fecha_legible, ""),
+            ("Operador",  operador,      ""),
+            ("Reservorio", codigo,       ""),
+        ]
+        
+        # Aplicamos exactamente el mismo formato visual de la tabla
+        formatted_rows = []
+        for item, value, unit in self.latest_rows:
+            v = fmt(value, 3) if unit in ("m³","m²","kL","ML") else fmt(value, 2) if unit in ("m","-") else str(value)
+            formatted_rows.append((item, v, unit))
+
+        rows_to_export = meta_rows + formatted_rows
 
         self._set_busy("Exportando a Google Sheets...")
         QApplication.processEvents()
@@ -1687,7 +1726,7 @@ class MainWindow(QMainWindow):
         try:
             res = export_rows_to_google_sheets(
                 GOOGLE_SHEETS_SPREADSHEET_ID,
-                self.latest_rows,
+                rows_to_export,
                 sheet_title=sheet_title,
             )
 
@@ -1700,12 +1739,6 @@ class MainWindow(QMainWindow):
                 },
             )
 
-            # Abrir en navegador
-            try:
-                open_url_default_app(str(res.get("spreadsheet_url", "")))
-            except Exception:
-                pass
-                
             self._set_idle(f"Exportado a Sheets: {res.get('worksheet_title')}")
             
             QMessageBox.information(

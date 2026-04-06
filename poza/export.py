@@ -127,16 +127,26 @@ def export_rows_to_google_sheets(
         is_new = True
         
     rows_list = list(rows)
-    
+
     # Extraer encabezados (Items de la primera columna) y los valores
     headers = [row[0] for row in rows_list]
-    values_row = [row[1] for row in rows_list]
+    
+    values_row = []
+    for row in rows_list:
+        val = row[1]
+        if isinstance(val, (float, int)) and not isinstance(val, bool):
+            val = round(float(val), 3)
+        values_row.append(val)
 
     if is_new:
-        # Escribimos los títulos y la primera fila de datos al mismo tiempo en A1 para asegurar
+        # Hoja nueva: escribir encabezados + primera fila de datos
         ws.update("A1", [headers, values_row], value_input_option="USER_ENTERED")
     else:
-        # Agregar solo los valores como una nueva fila al final
+        # Hoja existente: sincronizar encabezados si cambiaron (ej. se añadieron columnas)
+        existing_row1 = ws.row_values(1)
+        if existing_row1 != headers:
+            ws.update("A1", [headers], value_input_option="USER_ENTERED")
+        # Agregar la nueva fila de valores al final
         ws.append_row(values_row, value_input_option="USER_ENTERED")
 
     return {
