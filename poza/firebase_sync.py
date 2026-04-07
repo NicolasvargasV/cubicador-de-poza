@@ -301,6 +301,9 @@ class FirebaseSync:
         Descarga el historial de cubicaciones de un reservorio.
 
         Parámetros
+        crear una hoja nueva llamada "Cubicaciones" o usar la existente si ya está. Luego escribir los datos:
+        - Si la hoja es nueva, escribir encabezados + primera fila de datos.
+        - Si la hoja ya existe, sincronizar encabezados si cambiaron y agregar la nueva
         ----------
         reservorio_codigo : str
         on_result : callable(list[dict])
