@@ -106,6 +106,8 @@ class Dem(Base):
     archivo:       Mapped[str]           = mapped_column(String(256), nullable=False)
     ruta:          Mapped[str]           = mapped_column(Text, nullable=False)
     fecha_vuelo:   Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    drone:         Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    carpeta_datos: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     cargado_por:   Mapped[Optional[int]] = mapped_column(ForeignKey("usuarios.id"), nullable=True)
     created_at:    Mapped[datetime]      = mapped_column(DateTime, default=datetime.utcnow)
 

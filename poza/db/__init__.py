@@ -22,12 +22,31 @@ from .repository import Repository, AuthError, RepoError
 from .seed import seed_database
 
 
+def _apply_migrations() -> None:
+    """
+    Aplica migraciones incrementales para columnas añadidas después del
+    despliegue inicial. Idempotente: no falla si la columna ya existe.
+    """
+    from sqlalchemy import text
+    migrations = [
+        ("dems", "drone",         "TEXT"),
+        ("dems", "carpeta_datos", "TEXT"),
+    ]
+    with engine.begin() as conn:
+        for tabla, columna, tipo in migrations:
+            try:
+                conn.execute(text(f"ALTER TABLE {tabla} ADD COLUMN {columna} {tipo}"))
+            except Exception:
+                pass  # columna ya existe — operación idempotente
+
+
 def init_db() -> None:
     """
     Crea todas las tablas si no existen y carga datos iniciales.
     Llamar una vez al inicio de la aplicación.
     """
     Base.metadata.create_all(bind=engine)
+    _apply_migrations()
     with SessionLocal() as session:
         seed_database(session)
 

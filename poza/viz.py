@@ -171,6 +171,29 @@ class DemRenderer:
         except Exception:
             pass
 
+    # ── Muestreo de elevación ─────────────────────────────────────────────────
+
+    @property
+    def cell_size_m(self) -> tuple[float, float]:
+        """Retorna (ancho_px_m, alto_px_m) — tamaño de celda en metros."""
+        return (abs(self.transform.a), abs(self.transform.e))
+
+    def elevation_at(self, rx: float, ry: float) -> float | None:
+        """Retorna la elevación (m) en el pixel ráster (rx, ry), o None si está fuera/NoData."""
+        col, row = int(rx), int(ry)
+        if col < 0 or row < 0 or col >= self.width or row >= self.height:
+            return None
+        from rasterio.windows import Window
+        try:
+            val = float(self.src.read(1, window=Window(col, row, 1, 1))[0, 0])
+        except Exception:
+            return None
+        if val != val:  # NaN check
+            return None
+        if self.nodata is not None and abs(val - float(self.nodata)) < 1e-6:
+            return None
+        return val
+
     # ── Estadísticas ──────────────────────────────────────────────────────────
 
     def _compute_stats(self, scale_mode: str, stats_sample: int) -> DemStats:

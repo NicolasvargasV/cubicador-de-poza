@@ -20,7 +20,7 @@ from PySide6.QtWidgets import (
 )
 
 from .core import DemRaster, PondVolumeCalculator, DemError, PondVolumes
-from .masks import load_mask_shapes, MaskError, polygon_raster_to_geojson
+from .masks import polygon_raster_to_geojson   # sólo para convertir polígono dibujado
 from .export import (
     export_rows_to_csv,
     export_rows_to_google_sheets,
@@ -42,6 +42,20 @@ try:
 except ImportError:
     _FB_AVAILABLE = False
 
+try:
+    from .firebase_auth import (
+        sign_in as fb_sign_in,
+        FirebaseAuthError,
+        create_firebase_user,
+        list_firebase_users,
+        set_user_active_firebase,
+        update_user_role_firebase,
+        is_available as fb_auth_available,
+    )
+    _FB_AUTH_AVAILABLE = True
+except ImportError:
+    _FB_AUTH_AVAILABLE = False
+
 
 # ── Constantes de la app ──────────────────────────────────────────────────────
 _APP_NAME  = "V-Metric"
@@ -50,13 +64,13 @@ GOOGLE_SHEETS_SPREADSHEET_ID = "1P5_JBl2xSwLC7E0HmThbPPXVC93ecKETgRCbZFI-j9M"
 
 # ── Sistema de temas centralizado ─────────────────────────────────────────────
 from .themes import (
-    ThemeTokens, THEMES, THEME_CLARO,
+    ThemeTokens, THEMES, THEME_PREDETERMINADO,
     build_qss, build_login_qss, get_theme_by_name,
     contrast_ok, CUSTOM_FIELDS,
 )
 
 # Token del tema activo (global mutable — actualizado por _apply_theme)
-_ACTIVE_TOKENS: ThemeTokens = THEME_CLARO
+_ACTIVE_TOKENS: ThemeTokens = THEME_PREDETERMINADO
 
 
 def _apply_theme(app: QApplication, theme_name: str,
@@ -78,7 +92,7 @@ def _load_prefs() -> dict:
             return json.loads(_PREFS_PATH.read_text("utf-8"))
     except Exception:
         pass
-    return {"theme": "claro", "decimals": 3, "custom_colors": {}}
+    return {"theme": "predeterminado", "decimals": 3, "custom_colors": {}}
 
 def _save_prefs(p: dict) -> None:
     try:
@@ -131,8 +145,9 @@ class LoginDialog(QDialog):
             self.setWindowIcon(QIcon(str(_ICON_PATH)))
         # Siempre tema Claro — no afectado por el tema global de la app
         self.setStyleSheet(build_login_qss())
-        self._user_id = None
-        self._user_nombre = self._user_username = ""
+        self._user_id   = None   # int: SQLite shadow user id (para FKs locales)
+        self._user_uid  = None   # str: Firebase UID
+        self._user_nombre = self._user_email = ""
         self._user_rol = "operador"
         self._build_ui()
 
@@ -141,23 +156,23 @@ class LoginDialog(QDialog):
         # Header decorativo
         hdr = QWidget(); hdr.setFixedHeight(6)
         hdr.setStyleSheet(f"background: qlineargradient(x1:0,y1:0,x2:1,y2:0,"
-                          f"stop:0 {THEME_CLARO.primary},stop:1 {THEME_CLARO.accent_pos});")
+                          f"stop:0 {THEME_PREDETERMINADO.primary},stop:1 {THEME_PREDETERMINADO.accent_pos});")
         layout.addWidget(hdr)
         layout.addSpacing(4)
         lbl = QLabel(f"  {_APP_NAME}")
         lbl.setObjectName("loginTitle")
-        lbl.setStyleSheet(f"font: bold 20pt 'Segoe UI'; color: {THEME_CLARO.primary}; background: transparent;")
+        lbl.setStyleSheet(f"font: bold 20pt 'Segoe UI'; color: {THEME_PREDETERMINADO.primary}; background: transparent;")
         layout.addWidget(lbl)
         sub = QLabel("  Operación Atacama — Iniciar sesión")
-        sub.setStyleSheet(f"font: 9pt 'Segoe UI'; color: {THEME_CLARO.secondary}; background: transparent;")
+        sub.setStyleSheet(f"font: 9pt 'Segoe UI'; color: {THEME_PREDETERMINADO.secondary}; background: transparent;")
         layout.addWidget(sub)
         layout.addSpacing(14)
         form = QFormLayout(); form.setSpacing(10); form.setLabelAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        self._txt_user = QLineEdit(); self._txt_user.setPlaceholderText("Nombre de usuario"); self._txt_user.setMaxLength(64)
+        self._txt_user = QLineEdit(); self._txt_user.setPlaceholderText("correo@empresa.cl"); self._txt_user.setMaxLength(128)
         self._txt_pass = QLineEdit(); self._txt_pass.setPlaceholderText("Contraseña")
         self._txt_pass.setEchoMode(QLineEdit.Password); self._txt_pass.setMaxLength(128)
         self._txt_pass.returnPressed.connect(self._try_login)
-        form.addRow("Usuario:", self._txt_user)
+        form.addRow("Correo electrónico:", self._txt_user)
         form.addRow("Contraseña:", self._txt_pass)
         layout.addLayout(form)
         self._lbl_error = QLabel("")
@@ -167,9 +182,9 @@ class LoginDialog(QDialog):
         # Throbber
         thr = QHBoxLayout()
         self._spinner = SpinnerLabel()
-        self._spinner.setStyleSheet(f"font: bold 14pt 'Segoe UI'; color: {THEME_CLARO.primary};")
+        self._spinner.setStyleSheet(f"font: bold 14pt 'Segoe UI'; color: {THEME_PREDETERMINADO.primary};")
         self._spinner_lbl = QLabel("")
-        self._spinner_lbl.setStyleSheet(f"color:{THEME_CLARO.secondary}; font: italic 9pt 'Segoe UI'; background:transparent;")
+        self._spinner_lbl.setStyleSheet(f"color:{THEME_PREDETERMINADO.secondary}; font: italic 9pt 'Segoe UI'; background:transparent;")
         thr.addWidget(self._spinner); thr.addWidget(self._spinner_lbl); thr.addStretch()
         layout.addLayout(thr)
         layout.addStretch()
@@ -181,35 +196,87 @@ class LoginDialog(QDialog):
         row.addStretch(); row.addWidget(btn); layout.addLayout(row)
 
     def _try_login(self):
-        username = self._txt_user.text().strip(); password = self._txt_pass.text()
-        if not username or not password:
-            self._lbl_error.setText("Ingresa usuario y contraseña."); return
-        if not _DB_AVAILABLE:
-            self._user_nombre = self._user_username = username; self.accept(); return
+        email = self._txt_user.text().strip(); password = self._txt_pass.text()
+        if not email or not password:
+            self._lbl_error.setText("Ingresa correo y contraseña."); return
         self._spinner.start(); self._spinner_lbl.setText("Validando credenciales…")
         self._lbl_error.setText(""); QApplication.processEvents()
+
+        # ── Firebase Auth ──────────────────────────────────────────────────
+        if _FB_AUTH_AVAILABLE and fb_auth_available():
+            try:
+                session = fb_sign_in(email, password)
+                self._user_uid   = session.uid
+                self._user_email = session.email
+                self._user_nombre = session.nombre_completo or email.split("@")[0]
+                self._user_rol   = session.rol
+
+                # Crear/obtener shadow user en SQLite para FKs de cubicaciones
+                if _DB_AVAILABLE:
+                    try:
+                        from sqlalchemy import select as _sel
+                        from .db.models import Usuario as _Usr
+                        with get_session() as s:
+                            u = s.scalar(_sel(_Usr).where(_Usr.username == email))
+                            if u is None:
+                                import bcrypt as _bc
+                                u = _Usr(username=email,
+                                         password_hash=_bc.hashpw(b"firebase-shadow", _bc.gensalt()).decode(),
+                                         nombre_completo=self._user_nombre, rol=self._user_rol)
+                                s.add(u); s.commit(); s.refresh(u)
+                            elif u.nombre_completo != self._user_nombre or u.rol != self._user_rol:
+                                u.nombre_completo = self._user_nombre; u.rol = self._user_rol
+                                s.commit()
+                            self._user_id = u.id
+                    except Exception:
+                        self._user_id = None
+
+                # Registrar actividad en Firestore
+                if _FB_AVAILABLE:
+                    firebase_sync.log_activity_async(
+                        self._user_uid, "login",
+                        {"email": email, "rol": self._user_rol},
+                    )
+                self._spinner.stop(); self._spinner_lbl.setText(""); self.accept()
+
+            except FirebaseAuthError as e:
+                self._spinner.stop(); self._spinner_lbl.setText("")
+                if _FB_AVAILABLE:
+                    firebase_sync.log_activity_async("anon", "login_fallido", {"email": email, "motivo": str(e)})
+                self._lbl_error.setText(str(e)); self._txt_pass.clear(); self._txt_pass.setFocus()
+            return
+
+        # ── Fallback: SQLite auth (solo si Firebase no está configurado) ───
+        if not _DB_AVAILABLE:
+            self._user_nombre = self._user_email = email
+            self._spinner.stop(); self._spinner_lbl.setText(""); self.accept(); return
         try:
-            with get_session() as session:
-                repo = Repository(session)
-                user = repo.authenticate(username, password)
-                self._user_id = user.id; self._user_nombre = user.nombre_completo
-                self._user_username = user.username; self._user_rol = user.rol
+            with get_session() as s:
+                repo = Repository(s)
+                user = repo.authenticate(email, password)
+                self._user_id     = user.id
+                self._user_uid    = None
+                self._user_email  = user.username
+                self._user_nombre = user.nombre_completo
+                self._user_rol    = user.rol
                 repo.log("login", usuario=user, detalle={"ip": "localhost"})
             self._spinner.stop(); self._spinner_lbl.setText(""); self.accept()
         except Exception as e:
             self._spinner.stop(); self._spinner_lbl.setText("")
             try:
-                with get_session() as s:
-                    Repository(s).log("login_fallido", detalle={"username": username, "motivo": str(e)})
+                with get_session() as s2:
+                    Repository(s2).log("login_fallido", detalle={"email": email, "motivo": str(e)})
             except Exception: pass
             self._lbl_error.setText(str(e)); self._txt_pass.clear(); self._txt_pass.setFocus()
 
     @property
-    def user_id(self): return self._user_id
+    def user_id(self): return self._user_id        # int | None (SQLite shadow id)
+    @property
+    def user_uid(self): return self._user_uid      # str | None (Firebase UID)
     @property
     def user_nombre(self): return self._user_nombre
     @property
-    def user_username(self): return self._user_username
+    def user_username(self): return self._user_email   # email usado como username
     @property
     def user_rol(self): return self._user_rol
 
@@ -303,7 +370,7 @@ class AccountDialog(QDialog):
         lbl = QLabel("Usuarios registrados"); lbl.setStyleSheet("font: bold 10pt 'Segoe UI';")
         vl.addWidget(lbl)
         self._tbl_users = QTableWidget(0, 4)
-        self._tbl_users.setHorizontalHeaderLabels(["Usuario", "Nombre", "Rol", "Activo"])
+        self._tbl_users.setHorizontalHeaderLabels(["Correo", "Nombre", "Rol", "Activo"])
         self._tbl_users.horizontalHeader().setStretchLastSection(True)
         self._tbl_users.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
         self._tbl_users.verticalHeader().setVisible(False)
@@ -320,11 +387,11 @@ class AccountDialog(QDialog):
         lbl2 = QLabel("Crear nuevo usuario"); lbl2.setStyleSheet("font: bold 10pt 'Segoe UI';")
         vl.addWidget(lbl2)
         form2 = QFormLayout(); form2.setSpacing(6); form2.setLabelAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        self.txt_new_user   = QLineEdit(); self.txt_new_user.setPlaceholderText("nombre_usuario")
+        self.txt_new_user   = QLineEdit(); self.txt_new_user.setPlaceholderText("correo@empresa.cl")
         self.txt_new_nombre = QLineEdit(); self.txt_new_nombre.setPlaceholderText("Nombre Apellido")
-        self.txt_new_pass   = QLineEdit(); self.txt_new_pass.setPlaceholderText("Contraseña inicial"); self.txt_new_pass.setEchoMode(QLineEdit.Password)
+        self.txt_new_pass   = QLineEdit(); self.txt_new_pass.setPlaceholderText("Contraseña inicial (mín. 6 car.)"); self.txt_new_pass.setEchoMode(QLineEdit.Password)
         self.cmb_new_rol    = QComboBox(); self.cmb_new_rol.addItems(["operador", "admin"])
-        form2.addRow("Usuario:", self.txt_new_user)
+        form2.addRow("Correo:", self.txt_new_user)
         form2.addRow("Nombre:", self.txt_new_nombre)
         form2.addRow("Contraseña:", self.txt_new_pass)
         form2.addRow("Rol:", self.cmb_new_rol)
@@ -337,6 +404,24 @@ class AccountDialog(QDialog):
 
     def _refresh_users_table(self):
         self._tbl_users.setRowCount(0)
+        # Preferir Firebase para listar usuarios
+        if _FB_AUTH_AVAILABLE:
+            try:
+                users = list_firebase_users()
+                for u in users:
+                    r = self._tbl_users.rowCount(); self._tbl_users.insertRow(r)
+                    for col, val in enumerate([
+                        u.get("email", ""),
+                        u.get("nombre_completo", ""),
+                        u.get("rol", "operador"),
+                        "✓" if u.get("activo", True) else "✗",
+                    ]):
+                        it = QTableWidgetItem(str(val)); it.setTextAlignment(Qt.AlignVCenter | Qt.AlignLeft)
+                        self._tbl_users.setItem(r, col, it)
+                return
+            except Exception:
+                pass
+        # Fallback SQLite
         if not _DB_AVAILABLE: return
         try:
             with get_session() as s:
@@ -346,26 +431,44 @@ class AccountDialog(QDialog):
                 for col, val in enumerate([u.username, u.nombre_completo, u.rol, "✓" if u.activo else "✗"]):
                     it = QTableWidgetItem(str(val)); it.setTextAlignment(Qt.AlignVCenter | Qt.AlignLeft)
                     self._tbl_users.setItem(r, col, it)
-        except Exception as e:
+        except Exception:
             pass
 
     def _create_user(self):
-        username = self.txt_new_user.text().strip()
+        email    = self.txt_new_user.text().strip()
         nombre   = self.txt_new_nombre.text().strip()
         password = self.txt_new_pass.text()
         rol      = self.cmb_new_rol.currentText()
-        if not username or not nombre or not password:
+        if not email or not nombre or not password:
             self._lbl_admin_msg.setStyleSheet("color:#C0392B; font:bold 9pt 'Segoe UI';")
             self._lbl_admin_msg.setText("Completa todos los campos."); return
+        if len(password) < 6:
+            self._lbl_admin_msg.setStyleSheet("color:#C0392B; font:bold 9pt 'Segoe UI';")
+            self._lbl_admin_msg.setText("La contraseña debe tener al menos 6 caracteres."); return
+
+        # Crear en Firebase si está disponible
+        if _FB_AUTH_AVAILABLE:
+            try:
+                create_firebase_user(email=email, password=password,
+                                     nombre_completo=nombre, rol=rol)
+                self._lbl_admin_msg.setStyleSheet("color:#27AE60; font:bold 9pt 'Segoe UI';")
+                self._lbl_admin_msg.setText(f"Usuario '{email}' creado en Firebase.")
+                self.txt_new_user.clear(); self.txt_new_nombre.clear(); self.txt_new_pass.clear()
+                self._refresh_users_table(); return
+            except Exception as e:
+                self._lbl_admin_msg.setStyleSheet("color:#C0392B; font:bold 9pt 'Segoe UI';")
+                self._lbl_admin_msg.setText(str(e)); return
+
+        # Fallback SQLite
         if not _DB_AVAILABLE:
             self._lbl_admin_msg.setStyleSheet("color:#C0392B; font:bold 9pt 'Segoe UI';")
-            self._lbl_admin_msg.setText("Base de datos no disponible."); return
+            self._lbl_admin_msg.setText("Firebase Auth no disponible."); return
         try:
             with get_session() as s:
-                Repository(s).create_user(username=username, nombre_completo=nombre,
+                Repository(s).create_user(username=email, nombre_completo=nombre,
                                            password=password, rol=rol)
             self._lbl_admin_msg.setStyleSheet("color:#27AE60; font:bold 9pt 'Segoe UI';")
-            self._lbl_admin_msg.setText(f"Usuario '{username}' creado exitosamente.")
+            self._lbl_admin_msg.setText(f"Usuario '{email}' creado.")
             self.txt_new_user.clear(); self.txt_new_nombre.clear(); self.txt_new_pass.clear()
             self._refresh_users_table()
         except Exception as e:
@@ -378,9 +481,9 @@ class PreferencesDialog(QDialog):
     Diálogo de preferencias con selector de 4 temas y personalización de colores.
     El cambio se aplica en vivo al confirmar.
     """
-    # Nombres mostrados en el ComboBox (orden = orden en THEMES dict)
-    _THEME_LABELS = ["☀  Claro  (corporativo)", "🌑  Oscuro", "🌿  Soft  (jornada larga)", "🎨  Personalizado"]
-    _THEME_KEYS   = ["claro", "oscuro", "soft", "personalizado"]
+    # Nombres mostrados en el ComboBox
+    _THEME_LABELS = ["🌑  Predeterminado", "🎨  Personalizado"]
+    _THEME_KEYS   = ["predeterminado", "personalizado"]
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -417,7 +520,7 @@ class PreferencesDialog(QDialog):
         lbl_tm = QLabel("Seleccionar tema:"); lbl_tm.setFixedWidth(130)
         self.cmb_theme = QComboBox()
         self.cmb_theme.addItems(self._THEME_LABELS)
-        current_theme = self._prefs.get("theme", "claro")
+        current_theme = self._prefs.get("theme", "predeterminado")
         idx = self._THEME_KEYS.index(current_theme) if current_theme in self._THEME_KEYS else 0
         self.cmb_theme.setCurrentIndex(idx)
         self.cmb_theme.currentIndexChanged.connect(self._on_theme_changed)
@@ -448,7 +551,7 @@ class PreferencesDialog(QDialog):
             row_c = QHBoxLayout()
             lbl_c = QLabel(f"{field_label}:"); lbl_c.setFixedWidth(160)
             current_val = self._custom_colors.get(field_key,
-                          getattr(THEME_CLARO, field_key, "#29306A"))
+                          getattr(THEME_PREDETERMINADO, field_key, "#29306A"))
             swatch = QPushButton()
             swatch.setObjectName("colorSwatch")
             swatch.setFixedSize(48, 26)
@@ -462,7 +565,7 @@ class PreferencesDialog(QDialog):
             row_c.addWidget(lbl_c); row_c.addWidget(swatch); row_c.addWidget(lbl_hex); row_c.addStretch()
             cgl.addLayout(row_c)
         bl.addWidget(self._grp_custom)
-        self._grp_custom.setVisible(idx == 3)  # solo visible en "Personalizado"
+        self._grp_custom.setVisible(idx == 1)  # solo visible en "Personalizado"
 
         # ── Decimales ──
         grp_dec = QGroupBox("🔢  Precisión numérica")
@@ -487,23 +590,21 @@ class PreferencesDialog(QDialog):
         bl.addLayout(row_btns)
 
     def _on_theme_changed(self, idx: int):
-        self._grp_custom.setVisible(idx == 3)
+        self._grp_custom.setVisible(idx == 1)
         self._update_preview(idx)
         self.adjustSize()
 
     def _update_preview(self, idx: int):
         descs = [
-            "Paleta corporativa — fondo claro, azul marino #29306A, acento naranja y verde menta.",
-            "Escala de grises sobria — ideal para trabajo nocturno. Acentos mínimos.",
-            "Tonos cálidos y terrosos — pensado para jornadas largas frente a pantalla.",
-            "Define tus propios colores. Se aplican sobre la estructura del tema Claro.",
+            "Escala de grises sobria con acentos teal — tema oscuro, ideal para trabajo en campo.",
+            "Define tus propios colores. Se aplican sobre la estructura del tema Predeterminado.",
         ]
         self._lbl_preview.setText(descs[idx] if idx < len(descs) else "")
 
     def _pick_color(self, field_key: str):
         from PySide6.QtWidgets import QColorDialog
         from PySide6.QtGui import QColor
-        current = self._custom_colors.get(field_key, getattr(THEME_CLARO, field_key, "#29306A"))
+        current = self._custom_colors.get(field_key, getattr(THEME_PREDETERMINADO, field_key, "#29306A"))
         color = QColorDialog.getColor(QColor(current), self, f"Selecciona color — {field_key}")
         if not color.isValid(): return
         hex_val = color.name().upper()
@@ -514,7 +615,7 @@ class PreferencesDialog(QDialog):
         lbl = self._contrast_labels[field_key]
         lbl.setText(hex_val)
         # Validar contraste con fondo base
-        bg = self._custom_colors.get("bg_base", THEME_CLARO.bg_base)
+        bg = self._custom_colors.get("bg_base", THEME_PREDETERMINADO.bg_base)
         if field_key in ("text_base", "primary", "secondary"):
             ok = contrast_ok(hex_val, bg)
             lbl.setStyleSheet(
@@ -522,10 +623,10 @@ class PreferencesDialog(QDialog):
             )
 
     def _reset_custom(self):
-        """Restaura los colores personalizados a los defaults de Claro."""
+        """Restaura los colores personalizados a los defaults de Predeterminado."""
         self._custom_colors.clear()
         for field_key, _ in CUSTOM_FIELDS:
-            val = getattr(THEME_CLARO, field_key, "#29306A")
+            val = getattr(THEME_PREDETERMINADO, field_key, "#29306A")
             self._custom_colors[field_key] = val
             swatch = self._swatch_btns[field_key]
             swatch.setStyleSheet(f"background: {val}; border: 2px solid #888; border-radius:4px;")
@@ -548,16 +649,16 @@ class PreferencesDialog(QDialog):
         app = QApplication.instance()
         if app:
             _apply_theme(app, self._prefs["theme"],
-                         self._custom_colors if idx == 3 else None)
+                         self._custom_colors if idx == 1 else None)
         self.accept()
 
 
 _HELP_HTML = """
-<html><body style="font-family:'Segoe UI'; font-size:10pt; color:#222244; margin:16px;">
-<h2 style="color:#29306A;">Manual de uso — Cubicador de Pozas</h2>
-<h3 style="color:#F75C03;">1. Cargar DEM</h3>
+<html><body style="font-family:'Segoe UI'; font-size:10pt; color:#F6F6F6; margin:16px;">
+<h2 style="color:#F75C03;">Manual de uso — Cubicador de Pozas</h2>
+<h3 style="color:#FFFFFF;">1. Cargar DEM</h3>
 <p>En el panel <b>Parámetros</b>, haz clic en <b>Cargar DEM…</b> y selecciona un archivo GeoTIFF (.tif / .tiff). El visor mostrará el mapa de elevación con escala de colores automática.</p>
-<h3 style="color:#F75C03;">2. Contorno (máscara)</h3>
+<h3 style="color:#F6F6F6;">2. Contorno (máscara)</h3>
 <p>Carga un contorno desde archivo (<b>Cargar contorno…</b>) en formato GeoJSON, KML, KMZ o SHP, o dibuja el contorno directamente en el visor:</p>
 <ul>
 <li>Haz clic en <b>✏ Dibujar</b> en la barra del visor.</li>
@@ -567,7 +668,7 @@ _HELP_HTML = """
 <li>Con <b>Cursor</b> activo: <b>T</b> = insertar vértice, <b>R</b> = eliminar vértice, <b>Enter</b> = confirmar.</li>
 <li><b>Esc</b> cancela en cualquier momento.</li>
 </ul>
-<h3 style="color:#F75C03;">3. Ortofoto</h3>
+<h3 style="color:#FFFFFF;">3. Ortofoto</h3>
 <p>Haz clic en <b>Cargar ortofoto…</b> y luego activa el botón <b>🛰 Ortofoto</b> para alternar entre el DEM y la imagen RGB georeferenciada.</p>
 <h3 style="color:#F75C03;">4. Parámetros de cálculo</h3>
 <ul>
@@ -575,14 +676,14 @@ _HELP_HTML = """
 <li><b>Cota pelo de agua (m):</b> elevación de la superficie libre del agua.</li>
 <li><b>Fracción ocluida:</b> porcentaje de la superficie oculta (0.00 a 1.00).</li>
 </ul>
-<h3 style="color:#F75C03;">5. Calcular y exportar</h3>
+<h3 style="color:#FFFFFF;">5. Calcular y exportar</h3>
 <p>Haz clic en <b>⚡ Calcular volúmenes</b>. Los resultados aparecen en el panel <b>Resultados</b>. Usa <b>Exportar CSV</b> para guardar.</p>
-<h3 style="color:#F75C03;">6. Navegar el visor</h3>
+<h3 style="color:#FFFFFF;">6. Navegar el visor</h3>
 <ul>
 <li><b>Rueda del ratón:</b> zoom centrado en el cursor.</li>
 <li><b>Arrastrar:</b> paneo (en modo IDLE o con botón derecho).</li>
 </ul>
-<h3 style="color:#F75C03;">7. Paneles modulares</h3>
+<h3 style="color:#FFFFFF;">7. Paneles modulares</h3>
 <p>Todos los paneles son flotantes y reposicionables. Arrástralos desde su barra de título. Si cierras uno, recupéralo desde el menú <b>Vista</b>.</p>
 </body></html>
 """
@@ -606,9 +707,11 @@ class HelpDialog(QDialog):
 # ─────────────────────────────────────────────────────────────────────────────
 
 class PolyTool(IntEnum):
-    IDLE    = 0
-    DRAWING = 1
-    CURSOR  = 2
+    IDLE       = 0
+    DRAWING    = 1
+    CURSOR     = 2
+    RULER      = 3
+    ELEV_POINT = 4
 
 
 class DemViewerWidget(QWidget):
@@ -642,6 +745,13 @@ class DemViewerWidget(QWidget):
         self._poly_closed = False
         self._poly_mouse_screen: Tuple[float, float] = (0.0, 0.0)
         self._drag_vertex_idx: int | None = None
+        # ── Herramienta de cota puntual ───────────────────────────────────
+        self._elev_points: List[Tuple[float, float, float]] = []  # (rx, ry, elev_m)
+        self._cursor_elev: float | None = None
+        # ── Herramienta de regla ──────────────────────────────────────────
+        self._ruler_p1: Tuple[float, float] | None = None   # (rx, ry)
+        self._ruler_p2: Tuple[float, float] | None = None   # (rx, ry) — extremo fijo
+        self._ruler_mouse: Tuple[float, float] = (0.0, 0.0) # posición screen del cursor
 
     @property
     def renderer(self):
@@ -676,6 +786,11 @@ class DemViewerWidget(QWidget):
         if tool == PolyTool.DRAWING:
             self._poly_verts_raster.clear(); self._poly_closed = False
             self.setCursor(Qt.CrossCursor)
+        elif tool == PolyTool.ELEV_POINT:
+            self.setCursor(Qt.CrossCursor)
+        elif tool == PolyTool.RULER:
+            self._ruler_p1 = self._ruler_p2 = None
+            self.setCursor(Qt.CrossCursor)
         else:
             self.setCursor(Qt.ArrowCursor)
         if tool != prev: self.poly_tool_changed.emit(int(tool))
@@ -685,6 +800,17 @@ class DemViewerWidget(QWidget):
         prev = self._poly_tool; self._poly_tool = PolyTool.IDLE
         self._poly_verts_raster.clear(); self._poly_closed = False
         self._drag_vertex_idx = None; self.setCursor(Qt.ArrowCursor)
+        if prev != PolyTool.IDLE: self.poly_tool_changed.emit(0)
+        self.update()
+
+    def clear_canvas(self) -> None:
+        """Limpia polígono, regla y puntos de cota — vuelve a IDLE."""
+        self._poly_verts_raster.clear(); self._poly_closed = False
+        self._drag_vertex_idx = None
+        self._elev_points.clear(); self._cursor_elev = None
+        self._ruler_p1 = self._ruler_p2 = None
+        prev = self._poly_tool; self._poly_tool = PolyTool.IDLE
+        self.setCursor(Qt.ArrowCursor)
         if prev != PolyTool.IDLE: self.poly_tool_changed.emit(0)
         self.update()
 
@@ -700,10 +826,15 @@ class DemViewerWidget(QWidget):
         if self._pixmap:
             p.drawPixmap(int(self._render_info.get("off_x", 0)),
                          int(self._render_info.get("off_y", 0)), self._pixmap)
-        if self._poly_tool != PolyTool.IDLE and self._poly_verts_raster:
-            self._draw_poly_overlay(p)
-        elif self._poly_tool == PolyTool.DRAWING:
-            self._draw_hint(p, "  Clic = agregar vértice   Clic en inicio = cerrar   Esc = cancelar  ")
+        if self._poly_tool not in (PolyTool.IDLE, PolyTool.ELEV_POINT, PolyTool.RULER):
+            if self._poly_verts_raster:
+                self._draw_poly_overlay(p)
+            elif self._poly_tool == PolyTool.DRAWING:
+                self._draw_hint(p, "  Clic = agregar vértice   Clic en inicio = cerrar   Esc = cancelar  ")
+        if self._poly_tool == PolyTool.ELEV_POINT or self._elev_points:
+            self._draw_elev_overlay(p)
+        if self._poly_tool == PolyTool.RULER or self._ruler_p1:
+            self._draw_ruler_overlay(p)
         p.end()
 
     def mousePressEvent(self, event) -> None:
@@ -711,6 +842,26 @@ class DemViewerWidget(QWidget):
         sx, sy = float(event.position().x()), float(event.position().y())
         # SIEMPRE actualizar posición del mouse para evitar línea a (0,0)
         self._poly_mouse_screen = (sx, sy)
+
+        if self._poly_tool == PolyTool.ELEV_POINT:
+            if event.button() == Qt.LeftButton:
+                rx, ry = self._s2r(sx, sy)
+                r = self._dem_renderer
+                if r and hasattr(r, "elevation_at"):
+                    elev = r.elevation_at(rx, ry)
+                    if elev is not None:
+                        self._elev_points.append((rx, ry, elev)); self.update()
+            return
+
+        if self._poly_tool == PolyTool.RULER:
+            if event.button() == Qt.LeftButton:
+                rx, ry = self._s2r(sx, sy)
+                if self._ruler_p1 is None:
+                    self._ruler_p1 = (rx, ry)
+                else:
+                    self._ruler_p2 = (rx, ry)
+                self.update()
+            return
 
         if self._poly_tool == PolyTool.DRAWING:
             if event.button() == Qt.LeftButton:
@@ -736,6 +887,18 @@ class DemViewerWidget(QWidget):
     def mouseMoveEvent(self, event) -> None:
         sx, sy = float(event.position().x()), float(event.position().y())
         self._poly_mouse_screen = (sx, sy)
+        self._ruler_mouse = (sx, sy)
+
+        if self._poly_tool == PolyTool.ELEV_POINT:
+            # Mostrar cota bajo cursor en tiempo real
+            rx, ry = self._s2r(sx, sy)
+            r = self._dem_renderer
+            if r and hasattr(r, "elevation_at"):
+                self._cursor_elev = r.elevation_at(rx, ry)
+            self.update(); return
+
+        if self._poly_tool == PolyTool.RULER:
+            self.update(); return
 
         if self._poly_tool == PolyTool.DRAWING:
             self.update(); return
@@ -785,7 +948,13 @@ class DemViewerWidget(QWidget):
 
     def keyPressEvent(self, event) -> None:
         k = event.key()
-        if k == Qt.Key_Escape: self.clear_polygon(); return
+        if k == Qt.Key_Escape:
+            if self._poly_tool in (PolyTool.ELEV_POINT, PolyTool.RULER):
+                self._poly_tool = PolyTool.IDLE; self.poly_tool_changed.emit(0)
+                self.setCursor(Qt.ArrowCursor); self.update()
+            else:
+                self.clear_polygon()
+            return
         if self._poly_tool == PolyTool.CURSOR and self._poly_closed:
             if k == Qt.Key_T: self._insert_vertex_at_cursor(self._poly_mouse_screen); return
             if k == Qt.Key_R: self._remove_nearest_vertex(self._poly_mouse_screen); return
@@ -904,6 +1073,71 @@ class DemViewerWidget(QWidget):
 
         if self._poly_tool == PolyTool.CURSOR and self._poly_closed:
             self._draw_hint(p, "  Arrastrar = mover   T = insertar   R = quitar   Enter = confirmar   Esc = cancelar  ")
+
+    # ── Overlay: cotas ────────────────────────────────────────────────────────
+
+    def _draw_elev_overlay(self, p: QPainter) -> None:
+        """Dibuja los puntos de cota medidos y la cota bajo el cursor."""
+        # Badge de cota en cursor
+        if self._poly_tool == PolyTool.ELEV_POINT and self._cursor_elev is not None:
+            mx, my = self._poly_mouse_screen
+            text = f"  {self._cursor_elev:.3f} m  "
+            p.setPen(QColor(255, 255, 255))
+            p.fillRect(int(mx) + 10, int(my) - 20, 100, 18, QColor(0, 0, 0, 170))
+            p.drawText(int(mx) + 12, int(my) - 6, text)
+
+        # Puntos registrados
+        for rx, ry, elev in self._elev_points:
+            sx, sy = self._r2s(rx, ry)
+            p.setPen(QPen(QColor(0, 220, 180), 2)); p.setBrush(QColor(0, 220, 180, 200))
+            p.drawEllipse(QPointF(sx, sy), 5.0, 5.0)
+            label = f" {elev:.3f} m"
+            p.fillRect(int(sx) + 7, int(sy) - 16, 90, 16, QColor(0, 0, 0, 150))
+            p.setPen(QColor(0, 255, 200)); p.drawText(int(sx) + 8, int(sy) - 4, label)
+
+        if self._poly_tool == PolyTool.ELEV_POINT:
+            hint = "  Clic = medir cota   Esc = salir  "
+            if self._elev_points:
+                hint = f"  {len(self._elev_points)} punto(s) medido(s)   Esc = salir  "
+            self._draw_hint(p, hint)
+
+    # ── Overlay: regla ────────────────────────────────────────────────────────
+
+    def _draw_ruler_overlay(self, p: QPainter) -> None:
+        """Dibuja la regla de distancia (dos clics)."""
+        if self._ruler_p1 is None: return
+        sx1, sy1 = self._r2s(*self._ruler_p1)
+
+        # Línea hasta el segundo punto o hasta el cursor
+        if self._ruler_p2 is not None:
+            sx2, sy2 = self._r2s(*self._ruler_p2)
+        else:
+            sx2, sy2 = self._ruler_mouse
+
+        pen = QPen(QColor(255, 220, 0), 2, Qt.DashLine); pen.setCosmetic(True)
+        p.setPen(pen); p.drawLine(QPointF(sx1, sy1), QPointF(sx2, sy2))
+        p.setPen(QPen(QColor(255, 220, 0), 2)); p.setBrush(QColor(255, 220, 0, 220))
+        p.drawEllipse(QPointF(sx1, sy1), 5.0, 5.0)
+
+        # Calcular distancia en metros si hay renderer con transform
+        r = self._dem_renderer
+        if r and hasattr(r, "cell_size_m"):
+            cw, ch = r.cell_size_m
+            rx2, ry2 = self._s2r(sx2, sy2) if self._ruler_p2 is None else self._ruler_p2
+            dx_m = (rx2 - self._ruler_p1[0]) * cw
+            dy_m = (ry2 - self._ruler_p1[1]) * ch
+            dist = math.hypot(dx_m, dy_m)
+            label = f"  {dist:,.1f} m  " if dist < 10_000 else f"  {dist/1000:.3f} km  "
+            mx_lbl = int((sx1 + sx2) / 2); my_lbl = int((sy1 + sy2) / 2)
+            p.fillRect(mx_lbl - 4, my_lbl - 16, 100, 16, QColor(0, 0, 0, 160))
+            p.setPen(QColor(255, 240, 0)); p.drawText(mx_lbl, my_lbl - 4, label)
+
+        if self._ruler_p2 is None:
+            self._draw_hint(p, "  Clic = fijar segundo punto   Esc = cancelar  ")
+        else:
+            p.setPen(QPen(QColor(255, 220, 0), 2)); p.setBrush(QColor(255, 220, 0, 220))
+            p.drawEllipse(QPointF(sx2, sy2), 5.0, 5.0)
+            self._draw_hint(p, "  Esc = limpiar regla  ")
 
     # ── Render ────────────────────────────────────────────────────────────────
 
@@ -1043,11 +1277,13 @@ class HistoryPanel(QWidget):
 
 class MainWindow(QMainWindow):
 
-    def __init__(self, user_id=None, user_nombre="", user_username="", user_rol="operador"):
+    def __init__(self, user_id=None, user_uid=None, user_nombre="", user_username="", user_rol="operador"):
         super().__init__()
-        self._user_id = user_id; self._user_nombre = user_nombre
+        self._user_id  = user_id   # int | None — SQLite shadow id (FKs cubicaciones)
+        self._user_uid = user_uid  # str | None — Firebase UID
+        self._user_nombre = user_nombre
         self._user_username = user_username; self._user_rol = user_rol
-        self.dem_path = self.mask_path = None
+        self.dem_path = None
         self.latest_result: PondVolumes | None = None
         self.latest_rows: list = []
         self.current_reservorio_codigo: str | None = None
@@ -1117,19 +1353,16 @@ class MainWindow(QMainWindow):
         toolbar = QWidget()
         toolbar.setObjectName("viewerToolbar")
         tl = QHBoxLayout(toolbar); tl.setContentsMargins(6, 3, 6, 3); tl.setSpacing(4)
-        self.btn_pick_ortho = QPushButton("📂  Cargar ortofoto…")
-        self.btn_ortho      = QPushButton("🛰  Ortofoto")
-        self.btn_ortho.setCheckable(True); self.btn_ortho.setEnabled(False)
-        sep1 = QFrame(); sep1.setFrameShape(QFrame.VLine)
-        self.btn_draw_poly   = QPushButton("✏  Dibujar")
         self.btn_cursor_poly = QPushButton("↖  Cursor")
-        self.btn_clear_poly  = QPushButton("🗑  Borrar")
-        self.btn_draw_poly.setCheckable(True)
         self.btn_cursor_poly.setCheckable(True); self.btn_cursor_poly.setEnabled(False)
-        for b in (self.btn_pick_ortho, self.btn_ortho, self.btn_draw_poly,
-                  self.btn_cursor_poly, self.btn_clear_poly):
-            tl.addWidget(b)
-            if b is self.btn_ortho: tl.addWidget(sep1)
+        self.btn_elev_point = QPushButton("📍  Cota")
+        self.btn_elev_point.setCheckable(True)
+        sep1 = QFrame(); sep1.setFrameShape(QFrame.VLine)
+        self.btn_limpiar = QPushButton("🗑  Limpiar")
+        tl.addWidget(self.btn_cursor_poly)
+        tl.addWidget(self.btn_elev_point)
+        tl.addWidget(sep1)
+        tl.addWidget(self.btn_limpiar)
         tl.addStretch()
 
         # DEM viewer
@@ -1158,16 +1391,11 @@ class MainWindow(QMainWindow):
         rgl.addWidget(self.cmb_reservorio)
         vl.addWidget(grp_res)
 
-        # Archivos DEM / Contorno
+        # Archivos DEM
         grp_files = QGroupBox("📂  Archivos")
         fgl = QVBoxLayout(grp_files); fgl.setContentsMargins(10, 14, 10, 10); fgl.setSpacing(8)
-        row_btns = QHBoxLayout()
-        self.btn_pick_dem  = QPushButton("Cargar DEM…");     self.btn_pick_dem.setObjectName("btnSecondary")
-        self.btn_pick_mask = QPushButton("Cargar contorno…"); self.btn_pick_mask.setObjectName("btnSecondary")
-        row_btns.addWidget(self.btn_pick_dem); row_btns.addWidget(self.btn_pick_mask)
-        fgl.addLayout(row_btns)
-        self.chk_use_mask = QCheckBox("Usar contorno activo"); self.chk_use_mask.setChecked(True)
-        fgl.addWidget(self.chk_use_mask)
+        self.btn_pick_dem = QPushButton("Cargar DEM…"); self.btn_pick_dem.setObjectName("btnSecondary")
+        fgl.addWidget(self.btn_pick_dem)
         self.lbl_paths = QLabel("Sin DEM cargado")
         self.lbl_paths.setWordWrap(True)
         fgl.addWidget(self.lbl_paths)
@@ -1328,17 +1556,13 @@ class MainWindow(QMainWindow):
 
     def _connect_signals(self):
         self.btn_pick_dem.clicked.connect(self.pick_dem)
-        self.btn_pick_mask.clicked.connect(self.pick_mask)
         self.btn_export_sheets.clicked.connect(self.register_and_export)
-        self.chk_use_mask.toggled.connect(self._set_paths_label)
         self.btn_calculate.clicked.connect(self.calculate)
         self.btn_clear.clicked.connect(self.clear_results)
         self.cmb_reservorio.currentIndexChanged.connect(self._on_reservorio_changed)
-        self.btn_pick_ortho.clicked.connect(self.pick_ortho)
-        self.btn_ortho.toggled.connect(lambda c: self.viewer.set_use_ortho(c))
-        self.btn_draw_poly.toggled.connect(self._on_draw_poly_toggled)
         self.btn_cursor_poly.toggled.connect(self._on_cursor_poly_toggled)
-        self.btn_clear_poly.clicked.connect(self._on_clear_poly)
+        self.btn_elev_point.toggled.connect(self._on_elev_point_toggled)
+        self.btn_limpiar.clicked.connect(self._on_limpiar)
         self.viewer.polygon_committed.connect(self._on_polygon_committed)
         self.viewer.poly_tool_changed.connect(self._on_viewer_poly_tool_changed)
 
@@ -1376,34 +1600,37 @@ class MainWindow(QMainWindow):
 
     # ── Handlers polígono ─────────────────────────────────────────────────────
 
-    def _on_draw_poly_toggled(self, checked: bool):
-        if checked:
-            self.btn_cursor_poly.blockSignals(True); self.btn_cursor_poly.setChecked(False); self.btn_cursor_poly.blockSignals(False)
-            self.viewer.set_poly_tool(PolyTool.DRAWING); self.viewer.setFocus()
-        else:
-            if self.viewer._poly_tool == PolyTool.DRAWING: self.viewer.clear_polygon()
-
     def _on_cursor_poly_toggled(self, checked: bool):
         if checked:
             if not self.viewer._poly_closed:
                 self.btn_cursor_poly.blockSignals(True); self.btn_cursor_poly.setChecked(False); self.btn_cursor_poly.blockSignals(False)
                 return
-            self.btn_draw_poly.blockSignals(True); self.btn_draw_poly.setChecked(False); self.btn_draw_poly.blockSignals(False)
             self.viewer.set_poly_tool(PolyTool.CURSOR); self.viewer.setFocus()
         else:
             if self.viewer._poly_tool == PolyTool.CURSOR: self.viewer.clear_polygon()
 
     def _on_viewer_poly_tool_changed(self, tool_int: int):
         tool = PolyTool(tool_int)
-        for btn in (self.btn_draw_poly, self.btn_cursor_poly): btn.blockSignals(True)
-        self.btn_draw_poly.setChecked(tool == PolyTool.DRAWING)
+        for btn in (self.btn_cursor_poly, self.btn_elev_point): btn.blockSignals(True)
         self.btn_cursor_poly.setChecked(tool == PolyTool.CURSOR)
+        self.btn_elev_point.setChecked(tool == PolyTool.ELEV_POINT)
         self.btn_cursor_poly.setEnabled(self.viewer._poly_closed)
-        for btn in (self.btn_draw_poly, self.btn_cursor_poly): btn.blockSignals(False)
+        for btn in (self.btn_cursor_poly, self.btn_elev_point): btn.blockSignals(False)
 
-    def _on_clear_poly(self):
-        self.viewer.clear_polygon()
-        for b in (self.btn_draw_poly, self.btn_cursor_poly):
+    def _on_elev_point_toggled(self, checked: bool):
+        if checked:
+            self.btn_cursor_poly.blockSignals(True); self.btn_cursor_poly.setChecked(False); self.btn_cursor_poly.blockSignals(False)
+            self.btn_cursor_poly.setEnabled(False)
+            self.viewer.set_poly_tool(PolyTool.ELEV_POINT); self.viewer.setFocus()
+        else:
+            if self.viewer._poly_tool == PolyTool.ELEV_POINT:
+                self.viewer._poly_tool = PolyTool.IDLE
+                self.viewer.poly_tool_changed.emit(0); self.viewer.update()
+
+    def _on_limpiar(self):
+        """Limpia puntos de cota y polígono cursor del visor."""
+        self.viewer.clear_canvas()
+        for b in (self.btn_cursor_poly, self.btn_elev_point):
             b.blockSignals(True); b.setChecked(False); b.blockSignals(False)
         self.btn_cursor_poly.setEnabled(False)
 
@@ -1412,25 +1639,22 @@ class MainWindow(QMainWindow):
         try: data_dir.mkdir(parents=True, exist_ok=True)
         except Exception: data_dir = Path(__file__).parent.parent
         n = self.current_reservorio_codigo or "X"
-        out = data_dir / f"contorno_dibujado_{n}.geojson"
+        out = data_dir / f"poligono_dibujado_{n}.geojson"
         doc = {"type": "FeatureCollection",
                "features": [{"type": "Feature", "geometry": s, "properties": {}} for s in shapes]}
         try:
             out.write_text(json.dumps(doc, ensure_ascii=False, indent=2), encoding="utf-8")
         except Exception as e:
             QMessageBox.critical(self, "Polígono", f"No se pudo guardar:\n{e}"); return
-        self.mask_path = str(out); self.chk_use_mask.setChecked(True); self._set_paths_label()
         self.btn_cursor_poly.setEnabled(False)
         QMessageBox.information(self, "Polígono guardado",
-                                f"Guardado como:\n{out.name}\n\nActivo como contorno.")
+                                f"Guardado como:\n{out.name}")
 
     # ── Utilidades ────────────────────────────────────────────────────────────
 
     def _set_paths_label(self):
-        dem  = Path(self.dem_path).name  if self.dem_path  else "(sin DEM)"
-        mask = Path(self.mask_path).name if self.mask_path else "(sin contorno)"
-        use  = "✓" if self.chk_use_mask.isChecked() and self.mask_path else "✗"
-        self.lbl_paths.setText(f"DEM: {dem}\nContorno [{use}]: {mask}")
+        dem = Path(self.dem_path).name if self.dem_path else "(sin DEM)"
+        self.lbl_paths.setText(f"DEM: {dem}")
 
     def _get_float(self, s: str, name: str) -> float:
         try: return float((s or "").strip().replace(",", "."))
@@ -1441,12 +1665,16 @@ class MainWindow(QMainWindow):
                 else Path(__file__).parent.parent) / "DEMs"
 
     def _audit(self, accion: str, detalle: dict | None = None):
-        if not _DB_AVAILABLE or self._user_id is None: return
-        try:
-            with get_session() as s:
-                repo = Repository(s)
-                repo.log(accion, usuario=repo.get_user_by_id(self._user_id), detalle=detalle)
-        except Exception: pass
+        # SQLite local audit
+        if _DB_AVAILABLE and self._user_id is not None:
+            try:
+                with get_session() as s:
+                    repo = Repository(s)
+                    repo.log(accion, usuario=repo.get_user_by_id(self._user_id), detalle=detalle)
+            except Exception: pass
+        # Firestore activity log
+        if _FB_AVAILABLE and self._user_uid:
+            firebase_sync.log_activity_async(self._user_uid, accion, detalle)
 
     def _reset_layout(self):
         # Restaurar params y results en la columna derecha (apilados verticalmente)
@@ -1481,7 +1709,7 @@ class MainWindow(QMainWindow):
         if index <= 0:
             self.current_reservorio_codigo = self._current_dem_id = self.dem_path = None
             self.viewer.clear(); self.history_panel.clear()
-            self._dock_history.hide(); self._set_paths_label(); return
+            self._dock_history.hide(); self.lbl_paths.setText("Sin DEM cargado"); return
         self.current_reservorio_codigo = f"R{index}"; self._current_dem_id = None
         dem_file = self._dems_dir() / f"MDE_R{index}.tif"
         if dem_file.exists():
@@ -1519,6 +1747,35 @@ class MainWindow(QMainWindow):
         path, _ = QFileDialog.getOpenFileName(self, "Selecciona el DEM", "",
                                               "GeoTIFF (*.tif *.tiff);;Todos (*.*)")
         if not path: return
+
+        # ── Diálogo de metadatos del DEM ──────────────────────────────────
+        meta_dlg = QDialog(self)
+        meta_dlg.setWindowTitle("Metadatos del DEM")
+        meta_dlg.setWindowFlag(Qt.WindowContextHelpButtonHint, False)
+        meta_dlg.setMinimumWidth(380)
+        mdl = QVBoxLayout(meta_dlg); mdl.setContentsMargins(20, 16, 20, 16); mdl.setSpacing(10)
+        mdl.addWidget(QLabel(f"<b>{Path(path).name}</b>"))
+        mform = QFormLayout(); mform.setSpacing(8); mform.setLabelAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        txt_fecha  = QLineEdit(); txt_fecha.setPlaceholderText("YYYY-MM-DD  (opcional)")
+        txt_drone  = QLineEdit(); txt_drone.setPlaceholderText("Marca / modelo  (opcional)")
+        txt_carpeta = QLineEdit(); txt_carpeta.setPlaceholderText("Ruta o URL de la carpeta de datos  (opcional)")
+        mform.addRow("Fecha de vuelo:", txt_fecha)
+        mform.addRow("Drone:", txt_drone)
+        mform.addRow("Carpeta de datos:", txt_carpeta)
+        mdl.addLayout(mform)
+        mrow = QHBoxLayout()
+        btn_ok  = QPushButton("Continuar"); btn_ok.setObjectName("btnPrimary"); btn_ok.setDefault(True)
+        btn_skip = QPushButton("Omitir"); btn_skip.setObjectName("btnSecondary")
+        btn_ok.clicked.connect(meta_dlg.accept); btn_skip.clicked.connect(meta_dlg.accept)
+        mrow.addStretch(); mrow.addWidget(btn_skip); mrow.addWidget(btn_ok)
+        mdl.addLayout(mrow)
+        meta_dlg.exec()
+
+        fecha_vuelo  = txt_fecha.text().strip()  or None
+        drone        = txt_drone.text().strip()   or None
+        carpeta_datos = txt_carpeta.text().strip() or None
+
+        # ── Cargar DEM en el visor ────────────────────────────────────────
         self.dem_path = path
         self._set_busy("Cargando DEM…")
         try:
@@ -1528,45 +1785,44 @@ class MainWindow(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "DEM", f"No se pudo cargar DEM:\n{e}")
             self._set_idle("Error al cargar DEM"); self._set_paths_label(); return
-        if _DB_AVAILABLE and self.current_reservorio_codigo and self._user_id is not None:
+
+        # ── Registrar en SQLite ───────────────────────────────────────────
+        dem_id_local: int | None = None
+        if _DB_AVAILABLE and self.current_reservorio_codigo:
             try:
                 with get_session() as s:
                     repo = Repository(s); rv = repo.get_reservorio_by_codigo(self.current_reservorio_codigo)
                     if rv:
-                        dem_obj = repo.register_dem(reservorio_id=rv.id, archivo=Path(path).name,
-                                                    ruta=path, usuario_id=self._user_id)
-                        self._current_dem_id = dem_obj.id
+                        dem_obj = repo.register_dem(
+                            reservorio_id=rv.id, archivo=Path(path).name,
+                            ruta=path, usuario_id=self._user_id,
+                            fecha_vuelo=fecha_vuelo, drone=drone, carpeta_datos=carpeta_datos,
+                        )
+                        dem_id_local = dem_obj.id
+                        self._current_dem_id = dem_id_local
                         repo.update_reservorio_defaults(rv.id, dem_path=path)
-                        repo.log("dem_cargado", usuario=repo.get_user_by_id(self._user_id),
+                        repo.log("dem_cargado", usuario=repo.get_user_by_id(self._user_id) if self._user_id else None,
                                  detalle={"reservorio": self.current_reservorio_codigo,
-                                          "archivo": Path(path).name})
+                                          "archivo": Path(path).name,
+                                          "fecha_vuelo": fecha_vuelo, "drone": drone})
                         self.history_panel.load_reservorio(self.current_reservorio_codigo)
             except Exception: pass
+
+        # ── Registrar metadatos en Firestore ──────────────────────────────
         if _FB_AVAILABLE and self.current_reservorio_codigo:
-            firebase_sync.upload_dem_async(self.current_reservorio_codigo, path,
-                on_success=lambda u: self._set_idle("DEM sincronizado con la nube ☁"))
+            firebase_sync.upload_dem_metadata_async(
+                reservorio_codigo=self.current_reservorio_codigo,
+                dem_id=dem_id_local or 0,
+                archivo=Path(path).name,
+                uid=self._user_uid or "local",
+                fecha_vuelo=fecha_vuelo, drone=drone, carpeta_datos=carpeta_datos,
+            )
+        # Firestore audit
+        self._audit("dem_cargado", detalle={
+            "reservorio": self.current_reservorio_codigo,
+            "archivo": Path(path).name, "fecha_vuelo": fecha_vuelo, "drone": drone,
+        })
         self._set_paths_label()
-
-    def pick_ortho(self):
-        path, _ = QFileDialog.getOpenFileName(self, "Selecciona ortofoto", "",
-                                              "GeoTIFF (*.tif *.tiff);;Todos (*.*)")
-        if not path: return
-        self._set_busy("Cargando ortofoto…")
-        try:
-            self.viewer.set_ortho_renderer(OrthoRenderer(path))
-            self.btn_ortho.setEnabled(True); self.btn_ortho.setChecked(True)
-            self._set_idle(f"Ortofoto: {Path(path).name}")
-        except Exception as e:
-            QMessageBox.critical(self, "Ortofoto", f"No se pudo cargar:\n{e}")
-            self._set_idle("Error al cargar ortofoto")
-
-    def pick_mask(self):
-        path, _ = QFileDialog.getOpenFileName(
-            self, "Selecciona contorno", "",
-            "Contornos (*.geojson *.json *.kml *.kmz *.shp);;Todos (*.*)")
-        if not path: return
-        self.mask_path = path; self.chk_use_mask.setChecked(True); self._set_paths_label()
-        self._set_idle(f"Contorno cargado: {Path(path).name}")
 
     # ── Cálculo ───────────────────────────────────────────────────────────────
 
@@ -1582,8 +1838,7 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Parámetros", str(e)); return
         self._set_busy("Calculando volúmenes…")
         try:
-            shapes = load_mask_shapes(self.mask_path) if self.chk_use_mask.isChecked() and self.mask_path else None
-            res    = PondVolumeCalculator(DemRaster(self.dem_path, mask_shapes=shapes).load()).compute(
+            res = PondVolumeCalculator(DemRaster(self.dem_path).load()).compute(
                 salt, water, occluded_fraction=occ)
             self.latest_result = res; self.latest_rows = res.to_rows()
             self._populate_table(self.latest_rows)
@@ -1600,7 +1855,7 @@ class MainWindow(QMainWindow):
                                     f"DEM [{res.dem_min:.2f}–{res.dem_max:.2f} m]:\n\n"
                                     + "\n".join(warns) + "\n\nEl cálculo se realizó de todas formas.")
             self._set_idle(f"Cálculo completado  ·  Vol. salmuera: {fmt(res.brine_total_m3, 1)} m³")
-        except (MaskError, DemError) as e:
+        except DemError as e:
             QMessageBox.critical(self, "Error", str(e)); self._set_idle("Error en cálculo")
         except Exception as e:
             QMessageBox.critical(self, "Error inesperado", str(e)); self._set_idle("Error")
@@ -1625,12 +1880,23 @@ class MainWindow(QMainWindow):
             if anomalias: QMessageBox.warning(self, "Anomalía detectada", "\n\n".join(anomalias))
             self.history_panel.load_reservorio(self.current_reservorio_codigo)
         except Exception: pass
-        if _FB_AVAILABLE:
-            firebase_sync.upload_cubicacion_async(
+        if _FB_AVAILABLE and self.current_reservorio_codigo:
+            dem_filename = Path(self.dem_path).name if self.dem_path else None
+            firebase_sync.upload_cubicacion_history_async(
                 self.current_reservorio_codigo,
-                {"cota_sal": res.salt_level, "cota_agua": res.water_level,
-                 "vol_sal_m3": res.salt_total_m3, "vol_salmuera_m3": res.brine_total_m3,
-                 "area_espejo_m2": res.area_wet_m2, "usuario": self._user_username},
+                datos={
+                    "cota_sal": res.salt_level, "cota_agua": res.water_level,
+                    "fraccion_ocluida": res.occluded_fraction,
+                    "vol_sal_m3": res.salt_total_m3,
+                    "vol_salmuera_libre_m3": res.brine_free_m3,
+                    "vol_salmuera_ocluida_m3": res.brine_occluded_m3,
+                    "vol_salmuera_total_m3": res.brine_total_m3,
+                    "area_espejo_m2": res.area_wet_m2,
+                    "usuario": self._user_username,
+                    "dem_id_local": self._current_dem_id,
+                },
+                dem_filename=dem_filename,
+                uid=self._user_uid or "local",
                 on_success=lambda _: self._set_idle("Cubicación sincronizada con la nube ☁"),
             )
 
@@ -1783,13 +2049,16 @@ def main() -> None:
         app.setWindowIcon(QIcon(str(_ICON_PATH)))
     # Aplicar tema guardado antes de mostrar cualquier ventana
     prefs = _load_prefs()
-    _apply_theme(app, prefs.get("theme", "claro"), prefs.get("custom_colors") or None)
-    if _DB_AVAILABLE:
+    _apply_theme(app, prefs.get("theme", "predeterminado"), prefs.get("custom_colors") or None)
+    if _DB_AVAILABLE or _FB_AUTH_AVAILABLE:
         dlg = LoginDialog()
         dlg.setWindowTitle(f"{_APP_NAME} — Inicio de sesión")
         if dlg.exec() != QDialog.Accepted: sys.exit(0)
-        win = MainWindow(user_id=dlg.user_id, user_nombre=dlg.user_nombre,
-                         user_username=dlg.user_username, user_rol=dlg.user_rol)
+        win = MainWindow(
+            user_id=dlg.user_id, user_uid=dlg.user_uid,
+            user_nombre=dlg.user_nombre,
+            user_username=dlg.user_username, user_rol=dlg.user_rol,
+        )
     else:
         win = MainWindow()
     win.showMaximized()

@@ -173,6 +173,8 @@ class Repository:
         ruta: str,
         usuario_id: Optional[int] = None,
         fecha_vuelo: Optional[str] = None,
+        drone: Optional[str] = None,
+        carpeta_datos: Optional[str] = None,
     ) -> Dem:
         """Registra un nuevo DEM en el historial del reservorio."""
         dem = Dem(
@@ -181,6 +183,8 @@ class Repository:
             ruta=ruta,
             cargado_por=usuario_id,
             fecha_vuelo=fecha_vuelo,
+            drone=drone,
+            carpeta_datos=carpeta_datos,
         )
         return self._commit_and_refresh(dem)
 

@@ -186,17 +186,14 @@ class ThemeTokens:
 # Temas predefinidos
 # ─────────────────────────────────────────────────────────────────────────────
 
-#: Tema corporativo — paleta oficial de la empresa
-THEME_CLARO = ThemeTokens(name="Claro")  # Defaults = Claro
-
-#: Tema oscuro — escala de grises, acentos mínimos
-THEME_OSCURO = ThemeTokens(
-    name="Oscuro",
+#: Tema predeterminado — oscuro, minimalista, apto para jornadas largas en campo
+THEME_PREDETERMINADO = ThemeTokens(
+    name="Predeterminado",
     bg_base="#121212",     bg_secondary="#1B1B1B",  bg_surface="#232323",
     bg_input="#2C2C2C",    bg_header_a="#0A0A0A",   bg_header_b="#1B1B1B",
     bg_status="#0A0A0A",
     text_base="#F2F2F2",   text_muted="#B0B0B0",    text_disabled="#7A7A7A",
-    text_on_primary="#F2F2F2", text_placeholder="#555555", text_header="#EBEBEB",
+    text_on_primary="#F2F2F2", text_placeholder="#939393", text_header="#EBEBEB",
     border_main="#3A3A3A", border_light="#2A2A2A",   border_focus="#5C6BBF",
     primary="#4C5AA8",     primary_dark="#3A4590",   primary_light="#5C6BBF",
     secondary="#787878",   accent_pos="#35F2A0",      accent_pos_d="#1DC880",
@@ -239,65 +236,13 @@ THEME_OSCURO = ThemeTokens(
     hist_tab_brd="#4C5AA8",
 )
 
-#: Tema soft — tonos cálidos y terrosos, ideal para jornadas largas
-THEME_SOFT = ThemeTokens(
-    name="Soft",
-    bg_base="#EEE9E2",     bg_secondary="#E3DDD4",   bg_surface="#F5F1EB",
-    bg_input="#FAF7F2",    bg_header_a="#4A4F63",    bg_header_b="#737A91",
-    bg_status="#E3DDD4",
-    text_base="#3E3A37",   text_muted="#6E6862",     text_disabled="#A09A92",
-    text_on_primary="#F5F1EB", text_placeholder="#B0AA9E", text_header="#F5F1EB",
-    border_main="#D4CCC2", border_light="#E8E2D8",   border_focus="#5E647A",
-    primary="#5E647A",     primary_dark="#4A4F63",   primary_light="#737A91",
-    secondary="#8C877F",   accent_pos="#7FBFA8",      accent_pos_d="#5AA089",
-    accent_warn="#C47A4A", accent_warn_d="#A86335",
-    btn_bg="#EAE5DC",      btn_text="#3E3A37",        btn_border="#D4CCC2",
-    btn_hover_bg="#DDD7CE",btn_hover_brd="#5E647A",
-    btn_checked_bg="#5E647A", btn_checked_text="#F5F1EB",
-    btn_pressed_bg="#C47A4A", btn_pressed_text="#F5F1EB",
-    btn_dis_bg="#DDD9D2",  btn_dis_text="#A09A92",   btn_dis_brd="#CECCBE",
-    btn_pri_bg="#5E647A",  btn_pri_bg2="#737A91",    btn_pri_text="#F5F1EB",
-    btn_pri_hov_bg="#737A91", btn_pri_hov_bg2="#848C9F",
-    btn_pri_prs_bg="#C47A4A", btn_pri_dis_bg="#B0B5C4",
-    btn_acc_bg="#A86335",  btn_acc_bg2="#C47A4A",    btn_acc_text="#F5F1EB",
-    btn_acc_hov="#C47A4A", btn_acc_prs="#8C5025",    btn_acc_dis_bg="#D8B89A",
-    tbl_bg="#F5F1EB",      tbl_alt="#EAE5DC",        tbl_grid="#D4CCC2",
-    tbl_hdr_bg="#5E647A",  tbl_hdr_bg2="#737A91",   tbl_hdr_text="#F5F1EB",
-    tbl_sel_bg="#5E647A",  tbl_sel_text="#F5F1EB",
-    tbl_hover_bg="#DDD7CE",tbl_hover_text="#3E3A37",
-    dock_hdr_a="#4A4F63",  dock_hdr_b="#5E647A",
-    dock_hdr_brd="#C47A4A",dock_hdr_text="#F5F1EB",
-    menu_bar_bg="#5E647A", menu_bar_text="#F5F1EB",
-    menu_bg="#4A4F63",     menu_text="#F5F1EB",
-    menu_hov_bg="#C47A4A", menu_hov_text="#F5F1EB",
-    menu_sep="rgba(245,241,235,0.2)",
-    grp_bg="#F5F1EB",      grp_border="#D4CCC2",
-    grp_top_brd="#5E647A", grp_title="#5E647A",
-    grp_acc_top_brd="#C47A4A", grp_acc_title="#C47A4A",
-    scrl_track="#E3DDD4",  scrl_handle="#C8C0B4",    scrl_hover="#5E647A",
-    prog_track="#E3DDD4",  prog_border="#D4CCC2",
-    prog_chunk="#5E647A",  prog_chunk2="#C47A4A",
-    tip_bg="#5E647A",      tip_text="#F5F1EB",        tip_border="#4A4F63",
-    badge_bg="#5E647A",    badge_text="#F5F1EB",
-    badge_hov_bg="#737A91",badge_prs_bg="#C47A4A",
-    splitter="#D4CCC2",    frame_sep="#D4CCC2",       spinner_text="#C47A4A",
-    tab_header_bg="#5E647A",   tab_btn_text="rgba(245,241,235,0.6)",
-    tab_btn_active="#F5F1EB",  tab_btn_brd="#C47A4A",
-    hist_tab_bg="#E3DDD4",     hist_tab_text="#6E6862",
-    hist_tab_hover="#D8D2C8",  hist_tab_hover_text="#3E3A37",
-    hist_tab_active="#5E647A", hist_tab_active_text="#F5F1EB",
-    hist_tab_brd="#C47A4A",
-)
-
-#: Tema personalizado — copia de Claro que el usuario puede modificar
+#: Tema personalizado — copia del Predeterminado que el usuario puede modificar
 THEME_CUSTOM_BASE = ThemeTokens(name="Personalizado")
 
 #: Registro de todos los temas disponibles (orden = orden en ComboBox)
 THEMES: Dict[str, ThemeTokens] = {
-    "claro":        THEME_CLARO,
-    "oscuro":       THEME_OSCURO,
-    "soft":         THEME_SOFT,
-    "personalizado": THEME_CUSTOM_BASE,
+    "predeterminado": THEME_PREDETERMINADO,
+    "personalizado":  THEME_CUSTOM_BASE,
 }
 
 #: Campos modificables en el tema personalizado
@@ -347,12 +292,11 @@ def contrast_ok(fg: str, bg: str, level: str = "AA") -> bool:
 
 def build_custom_tokens(overrides: dict) -> ThemeTokens:
     """
-    Crea un ThemeTokens basado en THEME_CLARO con los campos sobreescritos.
+    Crea un ThemeTokens basado en THEME_PREDETERMINADO con los campos sobreescritos.
     Solo modifica los campos definidos en overrides.
-    Aplica validación de contraste mínimo.
     """
     import dataclasses
-    base = dataclasses.replace(THEME_CLARO, name="Personalizado")
+    base = dataclasses.replace(THEME_PREDETERMINADO, name="Personalizado")
     for key, val in overrides.items():
         if hasattr(base, key) and isinstance(val, str) and val.startswith("#"):
             object.__setattr__(base, key, val)
@@ -362,12 +306,15 @@ def build_custom_tokens(overrides: dict) -> ThemeTokens:
 def get_theme_by_name(name: str, custom_colors: Optional[dict] = None) -> ThemeTokens:
     """
     Devuelve un ThemeTokens para el nombre dado.
-    Para 'personalizado', aplica custom_colors sobre la base Claro.
+    Para 'personalizado', aplica custom_colors sobre la base Predeterminado.
     """
-    key = (name or "claro").lower()
+    key = (name or "predeterminado").lower()
+    # backward compat: "claro"/"oscuro"/"soft" → predeterminado
+    if key in ("claro", "oscuro", "soft"):
+        key = "predeterminado"
     if key == "personalizado" or key == "custom":
         return build_custom_tokens(custom_colors or {})
-    return THEMES.get(key, THEME_CLARO)
+    return THEMES.get(key, THEME_PREDETERMINADO)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1046,10 +993,10 @@ QFormLayout QLabel {{
 
 def build_login_qss() -> str:
     """
-    Siempre devuelve el QSS del tema Claro para la pantalla de login.
-    Independiente del tema activo en la app — identidad de marca fija.
+    Devuelve el QSS de la pantalla de login con paleta corporativa fija,
+    independiente del tema activo en la app.
     """
-    t = THEME_CLARO
+    t = THEME_PREDETERMINADO
     return f"""
 QDialog {{
     background: #F6F6F6;

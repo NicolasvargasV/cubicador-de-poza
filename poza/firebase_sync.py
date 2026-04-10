@@ -396,6 +396,186 @@ class FirebaseSync:
         t.start()
 
 
+    def log_activity_async(
+        self,
+        uid: str,
+        accion: str,
+        detalle: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """
+        Registra una acción del usuario en Firestore (activity_log/).
+
+        Estructura:
+            activity_log/{auto_id}
+                uid, accion, detalle, created_at
+
+        Parámetros
+        ----------
+        uid : str       UID de Firebase del usuario que realizó la acción.
+        accion : str    Nombre de la acción (ej. 'login', 'dem_cargado', 'cubicacion_calculada').
+        detalle : dict  Información adicional de contexto (opcional).
+        """
+        if not self._ready:
+            return
+
+        def _log() -> None:
+            try:
+                entry: Dict[str, Any] = {
+                    "uid": uid,
+                    "accion": accion,
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                }
+                if detalle:
+                    entry["detalle"] = detalle
+
+                self._db.collection("activity_log").add(entry)
+                logger.debug("Actividad registrada en Firestore: %s (uid=%s)", accion, uid)
+            except Exception as exc:
+                logger.warning("Error al registrar actividad '%s': %s", accion, exc)
+
+        t = threading.Thread(target=_log, name=f"fb-log-{accion}", daemon=True)
+        t.start()
+
+    def upload_dem_metadata_async(
+        self,
+        reservorio_codigo: str,
+        dem_id: int,
+        archivo: str,
+        uid: str,
+        fecha_vuelo: Optional[str] = None,
+        drone: Optional[str] = None,
+        carpeta_datos: Optional[str] = None,
+        on_success: Optional[Callable[[str], None]] = None,
+        on_error: Optional[Callable[[Exception], None]] = None,
+    ) -> None:
+        """
+        Registra los metadatos de un DEM cargado en Firestore.
+
+        Estructura:
+            reservorios/{reservorio_codigo}/dem_history/{auto_id}
+                dem_id, archivo, uid, fecha_vuelo, drone, carpeta_datos, created_at
+
+        No sube el archivo en sí (eso lo hace upload_dem_async si se desea).
+
+        Parámetros
+        ----------
+        reservorio_codigo : str
+        dem_id : int            ID local (SQLite) del DEM registrado.
+        archivo : str           Nombre del archivo .tif.
+        uid : str               UID Firebase del usuario que lo cargó.
+        fecha_vuelo : str       Fecha del vuelo fotogramétrico (opcional).
+        drone : str             Modelo/nombre del drone (opcional).
+        carpeta_datos : str     Ruta a la carpeta de datos de origen (opcional).
+        """
+        if not self._ready:
+            return
+
+        def _upload() -> None:
+            try:
+                now_iso = datetime.now(timezone.utc).isoformat()
+                entry: Dict[str, Any] = {
+                    "dem_id":     dem_id,
+                    "archivo":    archivo,
+                    "uid":        uid,
+                    "created_at": now_iso,
+                }
+                if fecha_vuelo:
+                    entry["fecha_vuelo"] = fecha_vuelo
+                if drone:
+                    entry["drone"] = drone
+                if carpeta_datos:
+                    entry["carpeta_datos"] = carpeta_datos
+
+                _, doc_ref = (
+                    self._db
+                    .collection("reservorios")
+                    .document(reservorio_codigo)
+                    .collection("dem_history")
+                    .add(entry)
+                )
+                logger.info(
+                    "Metadatos DEM '%s' guardados en Firestore: reservorios/%s/dem_history/%s",
+                    archivo, reservorio_codigo, doc_ref.id,
+                )
+                if on_success:
+                    on_success(doc_ref.id)
+            except Exception as exc:
+                logger.error(
+                    "Error al guardar metadatos DEM '%s' para '%s': %s",
+                    archivo, reservorio_codigo, exc,
+                )
+                if on_error:
+                    on_error(exc)
+
+        t = threading.Thread(target=_upload, name=f"fb-dem-meta-{reservorio_codigo}", daemon=True)
+        t.start()
+
+    def upload_cubicacion_history_async(
+        self,
+        reservorio_codigo: str,
+        datos: Dict[str, Any],
+        dem_filename: Optional[str] = None,
+        uid: Optional[str] = None,
+        on_success: Optional[Callable[[str], None]] = None,
+        on_error: Optional[Callable[[Exception], None]] = None,
+    ) -> None:
+        """
+        Duplica una cubicación en el historial de Firestore del reservorio.
+
+        Estructura:
+            reservorios/{reservorio_codigo}/cubicaciones_history/{auto_id}
+                (todos los campos de datos + dem_filename + uid + created_at)
+
+        Nota: NO modifica la lógica de envío a planilla. Solo agrega el
+        registro de trazabilidad en Firestore.
+
+        Parámetros
+        ----------
+        reservorio_codigo : str
+        datos : dict            Resultados de la cubicación (cotas, volúmenes, etc.).
+        dem_filename : str      Nombre del archivo DEM utilizado (opcional).
+        uid : str               UID Firebase del usuario que calculó (opcional).
+        """
+        if not self._ready:
+            return
+
+        def _upload() -> None:
+            try:
+                now_iso = datetime.now(timezone.utc).isoformat()
+                entry: Dict[str, Any] = {
+                    **datos,
+                    "reservorio_codigo": reservorio_codigo,
+                    "created_at": now_iso,
+                }
+                if dem_filename:
+                    entry["dem_filename"] = dem_filename
+                if uid:
+                    entry["uid"] = uid
+
+                _, doc_ref = (
+                    self._db
+                    .collection("reservorios")
+                    .document(reservorio_codigo)
+                    .collection("cubicaciones_history")
+                    .add(entry)
+                )
+                logger.info(
+                    "Cubicación guardada en cubicaciones_history: reservorios/%s/cubicaciones_history/%s",
+                    reservorio_codigo, doc_ref.id,
+                )
+                if on_success:
+                    on_success(doc_ref.id)
+            except Exception as exc:
+                logger.error(
+                    "Error al guardar cubicación en historial Firestore para '%s': %s",
+                    reservorio_codigo, exc,
+                )
+                if on_error:
+                    on_error(exc)
+
+        t = threading.Thread(target=_upload, name=f"fb-cub-hist-{reservorio_codigo}", daemon=True)
+        t.start()
+
     def download_dem_async(
         self,
         reservorio_codigo: str,
