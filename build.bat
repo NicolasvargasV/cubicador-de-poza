@@ -42,17 +42,7 @@ if errorlevel 1 (
 )
 echo [OK] Dependencias instaladas.
 
-:: ── 5. Verificar que firebase-auth-config.json existe ───
-if not exist "firebase-auth-config.json" (
-    echo.
-    echo [ERROR] Falta firebase-auth-config.json en la raiz del proyecto.
-    echo         Crea el archivo con el siguiente contenido:
-    echo         { "apiKey": "TU_API_KEY", "projectId": "TU_PROJECT_ID" }
-    pause & exit /b 1
-)
-echo [OK] firebase-auth-config.json encontrado.
-
-:: ── 6. Limpiar build anterior ────────────────────────────
+:: ── 5. Limpiar build anterior ────────────────────────────
 echo.
 echo [INFO] Limpiando build anterior ...
 if exist "build" rmdir /s /q build
@@ -77,8 +67,7 @@ if exist "dist\Cubicador_de_Pozas.exe" (
     echo   Ejecutable: dist\Cubicador_de_Pozas.exe
     echo  ========================================
     echo.
-    echo  Recuerda: distribuye el .exe junto con
-    echo  firebase-auth-config.json en la misma carpeta.
+    echo  El .exe es autónomo — no necesita archivos adicionales.
     echo.
 ) else (
     echo [ERROR] El ejecutable no fue generado.

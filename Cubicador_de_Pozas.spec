@@ -7,8 +7,7 @@ from PyInstaller.utils.hooks import collect_submodules
 # ── Datos estáticos ───────────────────────────────────────────────────────────
 datas = [
     ('img', 'img'),
-    # Config pública de Firebase Auth (apiKey + projectId — no es credencial privada)
-    ('firebase-auth-config.json', '.'),
+    # apiKey y projectId están embebidos en firebase_auth.py — no se necesita archivo externo
 ]
 
 # ── rasterio ──────────────────────────────────────────────────────────────────
