@@ -2,17 +2,19 @@ from __future__ import annotations
 
 import json
 import math
+import re
+import shutil
 import sys
 from enum import IntEnum
 from pathlib import Path
 from typing import Dict, List, Tuple
 
-from PySide6.QtCore import Qt, QPointF, QTimer, Signal
+from PySide6.QtCore import Qt, QPointF, QTimer, Signal, QDate
 from PySide6.QtGui import QAction, QColor, QImage, QPainter, QPen, QPixmap, QPolygonF
 from PySide6.QtWidgets import (
     QApplication, QButtonGroup, QCheckBox, QComboBox,
     QDialog, QDockWidget, QFileDialog, QFormLayout, QFrame,
-    QGroupBox, QHBoxLayout, QHeaderView, QLabel, QLineEdit,
+    QDateEdit, QGroupBox, QHBoxLayout, QHeaderView, QLabel, QLineEdit,
     QMainWindow, QMessageBox, QProgressBar, QPushButton,
     QSizePolicy, QSplitter, QStackedWidget, QStatusBar,
     QTableWidget, QTableWidgetItem, QTextBrowser,
@@ -1383,7 +1385,7 @@ class MainWindow(QMainWindow):
         vl = QVBoxLayout(panel); vl.setContentsMargins(10, 10, 10, 10); vl.setSpacing(10)
 
         # Reservorio
-        grp_res = QGroupBox("🗺  Reservorio")
+        grp_res = QGroupBox("🗺 Reservorio")
         rgl = QVBoxLayout(grp_res); rgl.setContentsMargins(10, 14, 10, 10)
         self.cmb_reservorio = QComboBox()
         self.cmb_reservorio.addItem("— Seleccionar —")
@@ -1744,6 +1746,65 @@ class MainWindow(QMainWindow):
     # ── Acciones de archivo ───────────────────────────────────────────────────
 
     def pick_dem(self):
+        # 1) Elegir reservorio explícitamente (aunque ya hubiese uno seleccionado)
+        selected_codigo: str | None = None
+        items: list[tuple[str, str]] = []  # (codigo, label)
+        if _DB_AVAILABLE:
+            try:
+                with get_session() as s:
+                    repo = Repository(s)
+                    for r in repo.list_reservorios():
+                        items.append((r.codigo, f"{r.codigo} — {r.nombre}"))
+            except Exception:
+                items = []
+        if not items:
+            items = [(f"R{i}", f"Reservorio {i}") for i in range(1, 11)]
+
+        def _sort_key(codigo: str) -> tuple[int, str]:
+            m = re.search(r"(\d+)", codigo or "")
+            return (int(m.group(1)) if m else 10**9, codigo or "")
+
+        items.sort(key=lambda it: _sort_key(it[0]))
+
+        sel_dlg = QDialog(self)
+        sel_dlg.setWindowTitle("Seleccionar reservorio")
+        sel_dlg.setWindowFlag(Qt.WindowContextHelpButtonHint, False)
+        sel_dlg.setMinimumWidth(420)
+        sdl = QVBoxLayout(sel_dlg); sdl.setContentsMargins(20, 16, 20, 16); sdl.setSpacing(10)
+        sdl.addWidget(QLabel("Elige el reservorio donde se cargará el DEM:"))
+        cmb = QComboBox(); cmb.setMinimumWidth(360)
+        for _codigo, label in items:
+            cmb.addItem(label, _codigo)
+        # Preseleccionar el actual si aplica
+        if self.current_reservorio_codigo:
+            for i in range(cmb.count()):
+                if (cmb.itemData(i) == self.current_reservorio_codigo):
+                    cmb.setCurrentIndex(i); break
+        sdl.addWidget(cmb)
+        srow = QHBoxLayout()
+        btn_cancel = QPushButton("Cancelar"); btn_cancel.setObjectName("btnSecondary")
+        btn_continue = QPushButton("Continuar"); btn_continue.setObjectName("btnPrimary"); btn_continue.setDefault(True)
+        btn_cancel.clicked.connect(sel_dlg.reject)
+        btn_continue.clicked.connect(sel_dlg.accept)
+        srow.addStretch(); srow.addWidget(btn_cancel); srow.addWidget(btn_continue)
+        sdl.addLayout(srow)
+        if sel_dlg.exec() != QDialog.Accepted:
+            return
+        selected_codigo = str(cmb.currentData() or "").strip() or None
+        if not selected_codigo:
+            return
+
+        # Sincronizar selección global/combobox (si el código es R<numero>)
+        self.current_reservorio_codigo = selected_codigo
+        if hasattr(self, "cmb_reservorio") and selected_codigo.startswith("R"):
+            try:
+                idx = int(selected_codigo[1:])
+                if 1 <= idx <= self.cmb_reservorio.count() - 1:
+                    self.cmb_reservorio.setCurrentIndex(idx)
+            except Exception:
+                pass
+
+        # 2) Seleccionar archivo DEM
         path, _ = QFileDialog.getOpenFileName(self, "Selecciona el DEM", "",
                                               "GeoTIFF (*.tif *.tiff);;Todos (*.*)")
         if not path: return
@@ -1756,32 +1817,74 @@ class MainWindow(QMainWindow):
         mdl = QVBoxLayout(meta_dlg); mdl.setContentsMargins(20, 16, 20, 16); mdl.setSpacing(10)
         mdl.addWidget(QLabel(f"<b>{Path(path).name}</b>"))
         mform = QFormLayout(); mform.setSpacing(8); mform.setLabelAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        txt_fecha  = QLineEdit(); txt_fecha.setPlaceholderText("YYYY-MM-DD  (opcional)")
+        dt_fecha = QDateEdit(); dt_fecha.setCalendarPopup(True)
+        dt_fecha.setDisplayFormat("yyyy-MM-dd")
+        dt_fecha.setMinimumDate(QDate(1900, 1, 1))
+        dt_fecha.setDate(QDate.currentDate())
+        _fecha_state = {"touched": False}
+        dt_fecha.dateChanged.connect(lambda _d: _fecha_state.__setitem__("touched", True))
         txt_drone  = QLineEdit(); txt_drone.setPlaceholderText("Marca / modelo  (opcional)")
-        txt_carpeta = QLineEdit(); txt_carpeta.setPlaceholderText("Ruta o URL de la carpeta de datos  (opcional)")
-        mform.addRow("Fecha de vuelo:", txt_fecha)
+        mform.addRow("Fecha de vuelo:", dt_fecha)
         mform.addRow("Drone:", txt_drone)
-        mform.addRow("Carpeta de datos:", txt_carpeta)
         mdl.addLayout(mform)
         mrow = QHBoxLayout()
         btn_ok  = QPushButton("Continuar"); btn_ok.setObjectName("btnPrimary"); btn_ok.setDefault(True)
         btn_skip = QPushButton("Omitir"); btn_skip.setObjectName("btnSecondary")
-        btn_ok.clicked.connect(meta_dlg.accept); btn_skip.clicked.connect(meta_dlg.accept)
+        btn_ok.clicked.connect(meta_dlg.accept)
+        def _skip_meta():
+            _fecha_state["touched"] = False
+            dt_fecha.setDate(QDate.currentDate()); txt_drone.setText("")
+            meta_dlg.accept()
+        btn_skip.clicked.connect(_skip_meta)
         mrow.addStretch(); mrow.addWidget(btn_skip); mrow.addWidget(btn_ok)
         mdl.addLayout(mrow)
         meta_dlg.exec()
 
-        fecha_vuelo  = txt_fecha.text().strip()  or None
+        fecha_vuelo = dt_fecha.date().toString("yyyy-MM-dd") if _fecha_state["touched"] else None
         drone        = txt_drone.text().strip()   or None
-        carpeta_datos = txt_carpeta.text().strip() or None
+        carpeta_datos = None
+
+        # 3) Guardar DEM en carpeta DEMs con nombre canónico por reservorio
+        dems_dir = self._dems_dir()
+        try:
+            dems_dir.mkdir(parents=True, exist_ok=True)
+        except Exception as e:
+            QMessageBox.critical(self, "DEM", f"No se pudo crear carpeta DEMs:\n{e}")
+            return
+
+        dest = dems_dir / f"MDE_{selected_codigo}.tif"
+        src = Path(path)
+        try:
+            # Evitar copiar sobre sí mismo
+            same_file = False
+            try:
+                same_file = src.resolve() == dest.resolve()
+            except Exception:
+                same_file = str(src) == str(dest)
+
+            if dest.exists() and not same_file:
+                resp = QMessageBox.question(
+                    self,
+                    "DEM",
+                    f"Ya existe un DEM para {selected_codigo}:\n\n{dest.name}\n\n¿Deseas reemplazarlo?",
+                    QMessageBox.Yes | QMessageBox.No,
+                    QMessageBox.No,
+                )
+                if resp != QMessageBox.Yes:
+                    return
+            if not same_file:
+                shutil.copy2(str(src), str(dest))
+        except Exception as e:
+            QMessageBox.critical(self, "DEM", f"No se pudo guardar el DEM en DEMs:\n{e}")
+            return
 
         # ── Cargar DEM en el visor ────────────────────────────────────────
-        self.dem_path = path
+        self.dem_path = str(dest)
         self._set_busy("Cargando DEM…")
         try:
-            r = DemRenderer(path, scale_mode="minmax", stats_sample=1024)
+            r = DemRenderer(self.dem_path, scale_mode="minmax", stats_sample=1024)
             self.viewer.set_dem_renderer(r); self.viewer._reset_view(r)
-            self._set_idle(f"DEM cargado: {Path(path).name}")
+            self._set_idle(f"DEM cargado: {dest.name}")
         except Exception as e:
             QMessageBox.critical(self, "DEM", f"No se pudo cargar DEM:\n{e}")
             self._set_idle("Error al cargar DEM"); self._set_paths_label(); return
@@ -1794,16 +1897,16 @@ class MainWindow(QMainWindow):
                     repo = Repository(s); rv = repo.get_reservorio_by_codigo(self.current_reservorio_codigo)
                     if rv:
                         dem_obj = repo.register_dem(
-                            reservorio_id=rv.id, archivo=Path(path).name,
-                            ruta=path, usuario_id=self._user_id,
+                            reservorio_id=rv.id, archivo=dest.name,
+                            ruta=str(dest), usuario_id=self._user_id,
                             fecha_vuelo=fecha_vuelo, drone=drone, carpeta_datos=carpeta_datos,
                         )
                         dem_id_local = dem_obj.id
                         self._current_dem_id = dem_id_local
-                        repo.update_reservorio_defaults(rv.id, dem_path=path)
+                        repo.update_reservorio_defaults(rv.id, dem_path=str(dest))
                         repo.log("dem_cargado", usuario=repo.get_user_by_id(self._user_id) if self._user_id else None,
                                  detalle={"reservorio": self.current_reservorio_codigo,
-                                          "archivo": Path(path).name,
+                                          "archivo": dest.name,
                                           "fecha_vuelo": fecha_vuelo, "drone": drone})
                         self.history_panel.load_reservorio(self.current_reservorio_codigo)
             except Exception: pass
@@ -1813,14 +1916,14 @@ class MainWindow(QMainWindow):
             firebase_sync.upload_dem_metadata_async(
                 reservorio_codigo=self.current_reservorio_codigo,
                 dem_id=dem_id_local or 0,
-                archivo=Path(path).name,
+                archivo=dest.name,
                 uid=self._user_uid or "local",
                 fecha_vuelo=fecha_vuelo, drone=drone, carpeta_datos=carpeta_datos,
             )
         # Firestore audit
         self._audit("dem_cargado", detalle={
             "reservorio": self.current_reservorio_codigo,
-            "archivo": Path(path).name, "fecha_vuelo": fecha_vuelo, "drone": drone,
+            "archivo": dest.name, "fecha_vuelo": fecha_vuelo, "drone": drone,
         })
         self._set_paths_label()
 
