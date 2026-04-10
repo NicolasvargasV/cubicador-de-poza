@@ -35,9 +35,10 @@ def seed_database(session: Session) -> None:
     """
     Inicializa la base de datos con datos mínimos si está vacía.
     Es idempotente: puede llamarse múltiples veces sin duplicar datos.
-    """
-    import bcrypt
 
+    Nota: el login es vía Firebase Auth — password_hash no se usa para
+    autenticar, solo existe para mantener el esquema de la tabla.
+    """
     # Reservorios
     for r_data in RESERVORIOS:
         exists = session.scalar(
@@ -46,13 +47,13 @@ def seed_database(session: Session) -> None:
         if not exists:
             session.add(Reservorio(codigo=r_data["codigo"], nombre=r_data["nombre"]))
 
-    # Admin por defecto
+    # Usuario admin local (shadow user para integridad FK en cubicaciones)
+    # La autenticación real ocurre en Firebase — este registro solo mantiene FK.
     admin = session.scalar(select(Usuario).where(Usuario.username == ADMIN_USERNAME))
     if not admin:
-        hashed = bcrypt.hashpw(ADMIN_PASSWORD.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
         session.add(Usuario(
             username=ADMIN_USERNAME,
-            password_hash=hashed,
+            password_hash="firebase-managed",  # no se usa para login
             nombre_completo=ADMIN_NOMBRE,
             rol="admin",
         ))

@@ -219,9 +219,8 @@ class LoginDialog(QDialog):
                         with get_session() as s:
                             u = s.scalar(_sel(_Usr).where(_Usr.username == email))
                             if u is None:
-                                import bcrypt as _bc
                                 u = _Usr(username=email,
-                                         password_hash=_bc.hashpw(b"firebase-shadow", _bc.gensalt()).decode(),
+                                         password_hash="firebase-managed",
                                          nombre_completo=self._user_nombre, rol=self._user_rol)
                                 s.add(u); s.commit(); s.refresh(u)
                             elif u.nombre_completo != self._user_nombre or u.rol != self._user_rol:
@@ -2047,4 +2046,74 @@ class MainWindow(QMainWindow):
             res = export_rows_to_google_sheets(
                 GOOGLE_SHEETS_SPREADSHEET_ID,
                 rows_to_export,
+                sheet_title=sheet_title,
+                credentials_path=str(local_cred),
+            )
+
+            self._audit(
+                "gsheets_exportado",
+                detalle={
+                    "reservorio": self.current_reservorio_codigo,
+                    "spreadsheet_id": GOOGLE_SHEETS_SPREADSHEET_ID,
+                    "worksheet": res.get("worksheet_title"),
+                },
+            )
+
+            self._set_idle(f"Exportado a Sheets: {res.get('worksheet_title')}")
+
+            QMessageBox.information(
+                self,
+                "Google Sheets",
+                "Exportación completada.\n\n"
+                f"Hoja creada/actualizada: {res.get('worksheet_title')}\n"
+            )
+
+        except Exception as e:
+            self._set_idle("Error en exportación")
+            extra = ""
+            if service_account_email:
+                extra += (
+                    "\n\nImportante: comparte el Spreadsheet como *Editor* con esta cuenta de servicio:\n"
+                    f"{service_account_email}"
+                )
+            QMessageBox.critical(
+                self,
+                "Exportar a Google Sheets",
+                f"Error al exportar:\n{str(e) or repr(e)}\n\n"
+                "Verifica permisos de edición, que la API de Google Sheets esté habilitada en el proyecto, "
+                "y que las credenciales sean válidas."
+                + extra
+            )
+
+    def clear_results(self):
+        self.latest_result = None; self.latest_rows = []; self.tree.clear()
+        self._set_idle("Resultados borrados")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Entrypoint
+# ─────────────────────────────────────────────────────────────────────────────
+
+def main() -> None:
+    app = QApplication(sys.argv)
+    app.setApplicationName(_APP_NAME)
+    if _ICON_PATH.exists():
+        from PySide6.QtGui import QIcon
+        app.setWindowIcon(QIcon(str(_ICON_PATH)))
+    # Aplicar tema guardado antes de mostrar cualquier ventana
+    prefs = _load_prefs()
+    _apply_theme(app, prefs.get("theme", "predeterminado"), prefs.get("custom_colors") or None)
+    if _DB_AVAILABLE or _FB_AUTH_AVAILABLE:
+        dlg = LoginDialog()
+        dlg.setWindowTitle(f"{_APP_NAME} — Inicio de sesión")
+        if dlg.exec() != QDialog.Accepted: sys.exit(0)
+        win = MainWindow(
+            user_id=dlg.user_id, user_uid=dlg.user_uid,
+            user_nombre=dlg.user_nombre,
+            user_username=dlg.user_username, user_rol=dlg.user_rol,
+        )
+    else:
+        win = MainWindow()
+    win.showMaximized()
+    sys.exit(app.exec())
     
