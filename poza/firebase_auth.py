@@ -15,11 +15,12 @@ Estructura de Firestore para perfiles de usuario:
         created_at:     ISO timestamp
 
 Requiere:
-    - poza/firebase-auth-config.json  (contiene {"apiKey": "...", "projectId": "..."})
     - firebase_admin ya inicializado (FirebaseSync lo hace al arrancar)
+    - requests  (pip install requests)
 
-Instalación de dependencias:
-    pip install requests
+No requiere archivos externos de configuración — apiKey y projectId
+están embebidos directamente (son datos públicos del proyecto Firebase,
+equivalentes al firebaseConfig en apps web/Android).
 """
 
 from __future__ import annotations
@@ -36,28 +37,14 @@ import requests  # tipo: ignorar si no está instalado
 logger = logging.getLogger(__name__)
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Config
+# Config — embebida directamente (apiKey es pública, no es credencial privada)
 # ─────────────────────────────────────────────────────────────────────────────
 
-_CONFIG_CANDIDATES: list[Path] = [
-    Path(__file__).parent.parent / "firebase-auth-config.json",
-    Path(__file__).parent / "firebase-auth-config.json",
-]
+_PROJECT_ID = "v-metric-76cdb"
+_API_KEY     = "AIzaSyBcDvM1j6NiLM8OpjHNVUtvN98YfY8s1D8"
 
 _SIGN_IN_URL = "https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword"
 _SIGN_UP_URL = "https://identitytoolkit.googleapis.com/v1/accounts:signUp"
-
-
-def _load_config() -> Dict[str, str]:
-    for p in _CONFIG_CANDIDATES:
-        if p.is_file():
-            with open(p, "r", encoding="utf-8") as f:
-                return json.load(f)
-    return {}
-
-
-_CONFIG: Dict[str, str] = _load_config()
-_API_KEY: str = _CONFIG.get("apiKey", "")
 
 
 # ─────────────────────────────────────────────────────────────────────────────

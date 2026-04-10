@@ -76,7 +76,8 @@ class FirebaseSync:
     Si Firebase no está disponible, los métodos son silenciosos.
     """
 
-    _PROJECT_ID = "v-metric-76cdb"
+    _PROJECT_ID   = "v-metric-76cdb"
+    _DATABASE_ID  = "v-metric"          # ID de la base Firestore (no es "(default)")
     _STORAGE_BUCKET = "v-metric-76cdb.firebasestorage.app"
 
     def __init__(self) -> None:
@@ -118,7 +119,7 @@ class FirebaseSync:
                             },
                         )
 
-                    self._db = firestore.client(app=self._app)
+                    self._db = firestore.client(app=self._app, database=self._DATABASE_ID)
                     self._bucket = storage.bucket(app=self._app)
                     self._ready = True
                     logger.info("Firebase inicializado correctamente (proyecto: %s).", self._PROJECT_ID)

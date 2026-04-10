@@ -63,12 +63,9 @@ class Repository:
 
     def authenticate(self, username: str, password: str) -> Usuario:
         """
-        Verifica credenciales y retorna el Usuario si son válidas.
-        Lanza AuthError en caso contrario.
-        Importación diferida de bcrypt para no bloquear el inicio si falta.
+        Verificación local (no se usa — el login es vía Firebase Auth).
+        Mantenida para compatibilidad de interfaz.
         """
-        import bcrypt
-
         user: Optional[Usuario] = self.session.scalar(
             select(Usuario).where(Usuario.username == username)
         )
@@ -76,8 +73,7 @@ class Repository:
             raise AuthError("Usuario no encontrado.")
         if not user.activo:
             raise AuthError("El usuario está desactivado.")
-        if not bcrypt.checkpw(password.encode("utf-8"), user.password_hash.encode("utf-8")):
-            raise AuthError("Contraseña incorrecta.")
+        # Contraseñas gestionadas por Firebase — no se verifica hash local
         return user
 
     def create_user(
@@ -87,33 +83,24 @@ class Repository:
         nombre_completo: str,
         rol: str = "operador",
     ) -> Usuario:
-        """Crea un usuario nuevo con la contraseña hasheada con bcrypt."""
-        import bcrypt
-
+        """Crea un shadow user local para integridad FK. Login real es Firebase."""
         existing = self.session.scalar(select(Usuario).where(Usuario.username == username))
         if existing:
             raise RepoError(f"El username '{username}' ya existe.")
 
-        hashed = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
         user = Usuario(
             username=username,
-            password_hash=hashed,
+            password_hash="firebase-managed",  # no se usa para autenticar
             nombre_completo=nombre_completo,
             rol=rol,
         )
         return self._commit_and_refresh(user)
 
     def update_password(self, usuario_id: int, new_password: str) -> None:
-        """Actualiza la contraseña de un usuario."""
-        import bcrypt
-
-        user = self.session.get(Usuario, usuario_id)
-        if not user:
-            raise RepoError("Usuario no encontrado.")
-        user.password_hash = bcrypt.hashpw(
-            new_password.encode("utf-8"), bcrypt.gensalt()
-        ).decode("utf-8")
-        self.session.commit()
+        """Actualiza contraseña — delegado a Firebase Auth, no se almacena localmente."""
+        # La contraseña real se actualiza en Firebase Auth (firebase_auth.py)
+        # El campo local no se usa para verificación
+        pass
 
     def set_user_active(self, usuario_id: int, activo: bool) -> None:
         user = self.session.get(Usuario, usuario_id)

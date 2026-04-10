@@ -221,9 +221,8 @@ class LoginDialog(QDialog):
                         with get_session() as s:
                             u = s.scalar(_sel(_Usr).where(_Usr.username == email))
                             if u is None:
-                                import bcrypt as _bc
                                 u = _Usr(username=email,
-                                         password_hash=_bc.hashpw(b"firebase-shadow", _bc.gensalt()).decode(),
+                                         password_hash="firebase-managed",
                                          nombre_completo=self._user_nombre, rol=self._user_rol)
                                 s.add(u); s.commit(); s.refresh(u)
                             elif u.nombre_completo != self._user_nombre or u.rol != self._user_rol:
@@ -672,7 +671,7 @@ _HELP_HTML = """
 </ul>
 <h3 style="color:#FFFFFF;">3. Ortofoto</h3>
 <p>Haz clic en <b>Cargar ortofoto…</b> y luego activa el botón <b>🛰 Ortofoto</b> para alternar entre el DEM y la imagen RGB georeferenciada.</p>
-<h3 style="color:#F75C03;">4. Parámetros de cálculo</h3>
+<h3 style="color:#FFFFFF;">4. Parámetros de cálculo</h3>
 <ul>
 <li><b>Cota de sal (m):</b> elevación superior de la capa de sal.</li>
 <li><b>Cota pelo de agua (m):</b> elevación de la superficie libre del agua.</li>
@@ -1355,15 +1354,29 @@ class MainWindow(QMainWindow):
         toolbar = QWidget()
         toolbar.setObjectName("viewerToolbar")
         tl = QHBoxLayout(toolbar); tl.setContentsMargins(6, 3, 6, 3); tl.setSpacing(4)
-        self.btn_cursor_poly = QPushButton("↖  Cursor")
-        self.btn_cursor_poly.setCheckable(True); self.btn_cursor_poly.setEnabled(False)
-        self.btn_elev_point = QPushButton("📍  Cota")
-        self.btn_elev_point.setCheckable(True)
+        self.btn_pick_ortho = QPushButton("📂  Cargar ortofoto…")
+        self.btn_ortho      = QPushButton("🛰  Ortofoto")
+        self.btn_ortho.setCheckable(True); self.btn_ortho.setEnabled(False)
         sep1 = QFrame(); sep1.setFrameShape(QFrame.VLine)
+        self.btn_draw_poly   = QPushButton("✏  Dibujar")
+        self.btn_cursor_poly = QPushButton("↖  Cursor")
+        self.btn_draw_poly.setCheckable(True)
+        self.btn_cursor_poly.setCheckable(True); self.btn_cursor_poly.setEnabled(False)
+        sep2 = QFrame(); sep2.setFrameShape(QFrame.VLine)
+        self.btn_ruler      = QPushButton("📐  Regla")
+        self.btn_elev_point = QPushButton("📍  Cota")
+        self.btn_ruler.setCheckable(True); self.btn_elev_point.setCheckable(True)
+        sep3 = QFrame(); sep3.setFrameShape(QFrame.VLine)
         self.btn_limpiar = QPushButton("🗑  Limpiar")
-        tl.addWidget(self.btn_cursor_poly)
-        tl.addWidget(self.btn_elev_point)
+        for b in (self.btn_pick_ortho, self.btn_ortho):
+            tl.addWidget(b)
         tl.addWidget(sep1)
+        for b in (self.btn_draw_poly, self.btn_cursor_poly):
+            tl.addWidget(b)
+        tl.addWidget(sep2)
+        for b in (self.btn_ruler, self.btn_elev_point):
+            tl.addWidget(b)
+        tl.addWidget(sep3)
         tl.addWidget(self.btn_limpiar)
         tl.addStretch()
 
@@ -1562,7 +1575,11 @@ class MainWindow(QMainWindow):
         self.btn_calculate.clicked.connect(self.calculate)
         self.btn_clear.clicked.connect(self.clear_results)
         self.cmb_reservorio.currentIndexChanged.connect(self._on_reservorio_changed)
+        self.btn_pick_ortho.clicked.connect(self.pick_ortho)
+        self.btn_ortho.toggled.connect(lambda c: self.viewer.set_use_ortho(c))
+        self.btn_draw_poly.toggled.connect(self._on_draw_poly_toggled)
         self.btn_cursor_poly.toggled.connect(self._on_cursor_poly_toggled)
+        self.btn_ruler.toggled.connect(self._on_ruler_toggled)
         self.btn_elev_point.toggled.connect(self._on_elev_point_toggled)
         self.btn_limpiar.clicked.connect(self._on_limpiar)
         self.viewer.polygon_committed.connect(self._on_polygon_committed)
@@ -1602,26 +1619,49 @@ class MainWindow(QMainWindow):
 
     # ── Handlers polígono ─────────────────────────────────────────────────────
 
+    def _on_draw_poly_toggled(self, checked: bool):
+        if checked:
+            self.btn_cursor_poly.blockSignals(True); self.btn_cursor_poly.setChecked(False); self.btn_cursor_poly.blockSignals(False)
+            self.viewer.set_poly_tool(PolyTool.DRAWING); self.viewer.setFocus()
+        else:
+            if self.viewer._poly_tool == PolyTool.DRAWING: self.viewer.clear_polygon()
+
     def _on_cursor_poly_toggled(self, checked: bool):
         if checked:
             if not self.viewer._poly_closed:
                 self.btn_cursor_poly.blockSignals(True); self.btn_cursor_poly.setChecked(False); self.btn_cursor_poly.blockSignals(False)
                 return
+            self.btn_draw_poly.blockSignals(True); self.btn_draw_poly.setChecked(False); self.btn_draw_poly.blockSignals(False)
             self.viewer.set_poly_tool(PolyTool.CURSOR); self.viewer.setFocus()
         else:
             if self.viewer._poly_tool == PolyTool.CURSOR: self.viewer.clear_polygon()
 
     def _on_viewer_poly_tool_changed(self, tool_int: int):
         tool = PolyTool(tool_int)
-        for btn in (self.btn_cursor_poly, self.btn_elev_point): btn.blockSignals(True)
+        all_btns = (self.btn_draw_poly, self.btn_cursor_poly, self.btn_ruler, self.btn_elev_point)
+        for btn in all_btns: btn.blockSignals(True)
+        self.btn_draw_poly.setChecked(tool == PolyTool.DRAWING)
         self.btn_cursor_poly.setChecked(tool == PolyTool.CURSOR)
+        self.btn_ruler.setChecked(tool == PolyTool.RULER)
         self.btn_elev_point.setChecked(tool == PolyTool.ELEV_POINT)
         self.btn_cursor_poly.setEnabled(self.viewer._poly_closed)
-        for btn in (self.btn_cursor_poly, self.btn_elev_point): btn.blockSignals(False)
+        for btn in all_btns: btn.blockSignals(False)
+
+    def _on_ruler_toggled(self, checked: bool):
+        if checked:
+            for b in (self.btn_draw_poly, self.btn_cursor_poly, self.btn_elev_point):
+                b.blockSignals(True); b.setChecked(False); b.blockSignals(False)
+            self.btn_cursor_poly.setEnabled(False)
+            self.viewer.set_poly_tool(PolyTool.RULER); self.viewer.setFocus()
+        else:
+            if self.viewer._poly_tool == PolyTool.RULER:
+                self.viewer._poly_tool = PolyTool.IDLE
+                self.viewer.poly_tool_changed.emit(0); self.viewer.update()
 
     def _on_elev_point_toggled(self, checked: bool):
         if checked:
-            self.btn_cursor_poly.blockSignals(True); self.btn_cursor_poly.setChecked(False); self.btn_cursor_poly.blockSignals(False)
+            for b in (self.btn_draw_poly, self.btn_cursor_poly, self.btn_ruler):
+                b.blockSignals(True); b.setChecked(False); b.blockSignals(False)
             self.btn_cursor_poly.setEnabled(False)
             self.viewer.set_poly_tool(PolyTool.ELEV_POINT); self.viewer.setFocus()
         else:
@@ -1630,9 +1670,9 @@ class MainWindow(QMainWindow):
                 self.viewer.poly_tool_changed.emit(0); self.viewer.update()
 
     def _on_limpiar(self):
-        """Limpia puntos de cota y polígono cursor del visor."""
+        """Limpia polígono, regla y puntos de cota del visor."""
         self.viewer.clear_canvas()
-        for b in (self.btn_cursor_poly, self.btn_elev_point):
+        for b in (self.btn_draw_poly, self.btn_cursor_poly, self.btn_ruler, self.btn_elev_point):
             b.blockSignals(True); b.setChecked(False); b.blockSignals(False)
         self.btn_cursor_poly.setEnabled(False)
 
@@ -1927,6 +1967,19 @@ class MainWindow(QMainWindow):
         })
         self._set_paths_label()
 
+    def pick_ortho(self):
+        path, _ = QFileDialog.getOpenFileName(self, "Selecciona ortofoto", "",
+                                              "GeoTIFF (*.tif *.tiff);;Todos (*.*)")
+        if not path: return
+        self._set_busy("Cargando ortofoto…")
+        try:
+            self.viewer.set_ortho_renderer(OrthoRenderer(path))
+            self.btn_ortho.setEnabled(True); self.btn_ortho.setChecked(True)
+            self._set_idle(f"Ortofoto: {Path(path).name}")
+        except Exception as e:
+            QMessageBox.critical(self, "Ortofoto", f"No se pudo cargar:\n{e}")
+            self._set_idle("Error al cargar ortofoto")
+
     # ── Cálculo ───────────────────────────────────────────────────────────────
 
     def calculate(self):
@@ -2110,7 +2163,7 @@ class MainWindow(QMainWindow):
             )
 
             self._set_idle(f"Exportado a Sheets: {res.get('worksheet_title')}")
-            
+
             QMessageBox.information(
                 self,
                 "Google Sheets",
@@ -2166,3 +2219,4 @@ def main() -> None:
         win = MainWindow()
     win.showMaximized()
     sys.exit(app.exec())
+    
