@@ -1216,7 +1216,9 @@ class HistoryPanel(QWidget):
             "Fecha", "Operador", "Cota Sal (m)", "Cota Agua (m)",
             "Vol. Sal (m³)", "Vol. Salmuera (m³)", "Área Espejo (m²)", "Notas",
         ])
-        self.tbl_dems = self._make_table(["Fecha Carga", "Archivo", "Fecha Vuelo", "Cargado por"])
+        self.tbl_dems = self._make_table([
+            "Fecha Carga", "Archivo", "Fecha Vuelo", "Drone", "Carpeta datos", "Cargado por",
+        ])
         self._stack.addWidget(self.tbl_mediciones)
         self._stack.addWidget(self.tbl_dems)
         self._btn_group.idClicked.connect(self._stack.setCurrentIndex)
@@ -1260,7 +1262,14 @@ class HistoryPanel(QWidget):
                     r = self.tbl_dems.rowCount(); self.tbl_dems.insertRow(r)
                     fecha = d.created_at.strftime("%Y-%m-%d %H:%M") if d.created_at else "—"
                     cb    = d.cargado_por_usuario.nombre_completo if d.cargado_por_usuario else "—"
-                    for col, val in enumerate([fecha, d.archivo, d.fecha_vuelo or "—", cb]):
+                    for col, val in enumerate([
+                        fecha,
+                        d.archivo,
+                        d.fecha_vuelo or "—",
+                        d.drone or "—",
+                        d.carpeta_datos or "—",
+                        cb,
+                    ]):
                         self._cell(self.tbl_dems, r, col, val)
         except Exception: pass
 
@@ -1864,8 +1873,21 @@ class MainWindow(QMainWindow):
         _fecha_state = {"touched": False}
         dt_fecha.dateChanged.connect(lambda _d: _fecha_state.__setitem__("touched", True))
         txt_drone  = QLineEdit(); txt_drone.setPlaceholderText("Marca / modelo  (opcional)")
+        txt_carpeta = QLineEdit(); txt_carpeta.setPlaceholderText("Ruta a carpeta de datos del vuelo  (opcional)")
+        btn_carpeta = QPushButton("Examinar…"); btn_carpeta.setObjectName("btnSecondary")
+        def _pick_carpeta():
+            start_dir = str(Path(path).parent) if path else ""
+            folder = QFileDialog.getExistingDirectory(self, "Selecciona carpeta de datos", start_dir)
+            if folder:
+                txt_carpeta.setText(folder)
+        btn_carpeta.clicked.connect(_pick_carpeta)
+        carpeta_row = QWidget()
+        ch = QHBoxLayout(carpeta_row); ch.setContentsMargins(0, 0, 0, 0); ch.setSpacing(6)
+        ch.addWidget(txt_carpeta, 1)
+        ch.addWidget(btn_carpeta, 0)
         mform.addRow("Fecha de vuelo:", dt_fecha)
         mform.addRow("Drone:", txt_drone)
+        mform.addRow("Carpeta de datos:", carpeta_row)
         mdl.addLayout(mform)
         mrow = QHBoxLayout()
         btn_ok  = QPushButton("Continuar"); btn_ok.setObjectName("btnPrimary"); btn_ok.setDefault(True)
@@ -1873,7 +1895,7 @@ class MainWindow(QMainWindow):
         btn_ok.clicked.connect(meta_dlg.accept)
         def _skip_meta():
             _fecha_state["touched"] = False
-            dt_fecha.setDate(QDate.currentDate()); txt_drone.setText("")
+            dt_fecha.setDate(QDate.currentDate()); txt_drone.setText(""); txt_carpeta.setText("")
             meta_dlg.accept()
         btn_skip.clicked.connect(_skip_meta)
         mrow.addStretch(); mrow.addWidget(btn_skip); mrow.addWidget(btn_ok)
@@ -1882,7 +1904,7 @@ class MainWindow(QMainWindow):
 
         fecha_vuelo = dt_fecha.date().toString("yyyy-MM-dd") if _fecha_state["touched"] else None
         drone        = txt_drone.text().strip()   or None
-        carpeta_datos = None
+        carpeta_datos = txt_carpeta.text().strip() or None
 
         # 3) Guardar DEM en carpeta DEMs con nombre canónico por reservorio
         dems_dir = self._dems_dir()
@@ -1947,7 +1969,8 @@ class MainWindow(QMainWindow):
                         repo.log("dem_cargado", usuario=repo.get_user_by_id(self._user_id) if self._user_id else None,
                                  detalle={"reservorio": self.current_reservorio_codigo,
                                           "archivo": dest.name,
-                                          "fecha_vuelo": fecha_vuelo, "drone": drone})
+                                          "fecha_vuelo": fecha_vuelo, "drone": drone,
+                                          "carpeta_datos": carpeta_datos})
                         self.history_panel.load_reservorio(self.current_reservorio_codigo)
             except Exception: pass
 
@@ -1964,6 +1987,7 @@ class MainWindow(QMainWindow):
         self._audit("dem_cargado", detalle={
             "reservorio": self.current_reservorio_codigo,
             "archivo": dest.name, "fecha_vuelo": fecha_vuelo, "drone": drone,
+            "carpeta_datos": carpeta_datos,
         })
         self._set_paths_label()
 
